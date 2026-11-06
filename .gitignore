@@ -1,0 +1,68 @@
+# ==========================================
+# Environments & Secrets (Never commit actual credentials)
+# ==========================================
+.env
+.env.local
+.env.*.local
+*.env
+!*.env.example
+
+# ==========================================
+# Python Virtual Environments & Packages
+# ==========================================
+.venv/
+.venv*/
+venv/
+env/
+ENV/
+
+# ==========================================
+# Python Bytecode & Cache
+# ==========================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+
+# ==========================================
+# Testing & Code Quality
+# ==========================================
+.pytest_cache/
+.coverage
+htmlcov/
+
+# ==========================================
+# Node.js & Frontend Build Outputs
+# ==========================================
+node_modules/
+wms-dashboard/node_modules/
+wms-dashboard/dist/
+dist/
+dist-ssr/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ==========================================
+# IDE & Operating System Files
+# ==========================================
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ==========================================
+# Logs & Scratch Scripts
+# ==========================================
+logs/
+*.log
+scratch/
+tmp/
+

@@ -1,0 +1,1 @@
+export const inputCls = "w-full border border-slate-200 rounded-md px-3 py-2 text-sm text-slate-800 bg-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-900/10 transition-colors";
