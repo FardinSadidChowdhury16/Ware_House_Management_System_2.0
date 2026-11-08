@@ -148,6 +148,8 @@ class InventoryController:
         warehouse_id: Optional[int] = None,
         search: Optional[str] = None,
         tracking_type: Optional[str] = None,
+        date_from: Optional[str] = None,
+        date_to: Optional[str] = None,
         allowed_warehouse_ids: Optional[List[int]] = None,
     ):
         service = InventoryService(db)
@@ -155,6 +157,8 @@ class InventoryController:
             warehouse_id=warehouse_id,
             search=search,
             tracking_type=tracking_type,
+            date_from=date_from,
+            date_to=date_to,
             allowed_warehouse_ids=allowed_warehouse_ids,
         )
 

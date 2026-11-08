@@ -254,26 +254,63 @@ function ProductDetailModal({ item, onClose }) {
     >
       <div className="space-y-4">
         {/* Quick Specs Grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs bg-slate-50 p-3 rounded-lg border border-slate-200">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs bg-slate-50 dark:bg-slate-800/60 p-3 rounded-lg border border-slate-200 dark:border-slate-700">
           <div>
             <span className="text-slate-400 block mb-0.5">Category</span>
-            <span className="font-semibold text-slate-800">{item.category_name || "General"}</span>
+            <span className="font-semibold text-slate-800 dark:text-slate-200">{item.category_name || "General"}</span>
           </div>
           <div>
             <span className="text-slate-400 block mb-0.5">Warehouse</span>
-            <span className="font-semibold text-slate-800">{item.warehouse_name || "—"}</span>
+            <span className="font-semibold text-slate-800 dark:text-slate-200">{item.warehouse_name || "—"}</span>
           </div>
           <div>
             <span className="text-slate-400 block mb-0.5">Tracking Mode</span>
-            <span className="font-semibold text-indigo-700 capitalize">{item.tracking_type}</span>
+            <span className="font-semibold text-indigo-700 dark:text-indigo-400 capitalize">{item.tracking_type}</span>
           </div>
           <div>
-            <span className="text-slate-400 block mb-0.5">Available In Stock</span>
-            <span className="font-bold font-mono text-emerald-700 text-sm">
-              {item.in_stock_qty ?? 0} units
+            <span className="text-slate-400 block mb-0.5">
+              {item.closing_stock_qty !== undefined ? "Closing Stock" : "Available In Stock"}
+            </span>
+            <span className="font-bold font-mono text-emerald-700 dark:text-emerald-400 text-sm">
+              {(item.closing_stock_qty ?? item.in_stock_qty ?? 0)} units
             </span>
           </div>
         </div>
+
+        {/* Periodic Cumulative Reconciliation Strip */}
+        {item.opening_stock_qty !== undefined && (
+          <div className="p-3 bg-blue-50/60 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900 rounded-lg text-xs space-y-2">
+            <span className="text-[11px] font-semibold text-blue-800 dark:text-blue-300 uppercase tracking-wider block">
+              Periodic Inventory Accounting
+            </span>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
+              <div className="bg-white dark:bg-slate-800 p-2 rounded border border-blue-100 dark:border-slate-700">
+                <span className="text-[10px] text-slate-500 dark:text-slate-400 block">Opening Stock</span>
+                <span className="font-mono font-bold text-slate-900 dark:text-slate-100 text-sm">
+                  {item.opening_stock_qty ?? 0}
+                </span>
+              </div>
+              <div className="bg-white dark:bg-slate-800 p-2 rounded border border-emerald-100 dark:border-slate-700">
+                <span className="text-[10px] text-emerald-600 dark:text-emerald-400 block">Inbound (+)</span>
+                <span className="font-mono font-bold text-emerald-700 dark:text-emerald-300 text-sm">
+                  +{(item.stock_in_qty || 0) + (item.transfer_in_qty || 0)}
+                </span>
+              </div>
+              <div className="bg-white dark:bg-slate-800 p-2 rounded border border-amber-100 dark:border-slate-700">
+                <span className="text-[10px] text-amber-600 dark:text-amber-400 block">Outbound (-)</span>
+                <span className="font-mono font-bold text-amber-700 dark:text-amber-300 text-sm">
+                  -{(item.stock_out_qty || 0) + (item.transfer_out_qty || 0)}
+                </span>
+              </div>
+              <div className="bg-white dark:bg-slate-800 p-2 rounded border border-purple-100 dark:border-slate-700">
+                <span className="text-[10px] text-purple-600 dark:text-purple-400 block">Closing Stock</span>
+                <span className="font-mono font-bold text-purple-700 dark:text-purple-300 text-sm">
+                  {item.closing_stock_qty ?? item.in_stock_qty ?? 0}
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Variant breakdown if available */}
         {item.variant_counts && Object.keys(item.variant_counts).length > 0 && (
@@ -416,11 +453,15 @@ export function ReportsPage({ initialReport = "stock_summary" }) {
   const [stockName, setStockName] = useState("");
   const [stockTrackingFilter, setStockTrackingFilter] = useState("all");
   const [stockStatusFilter, setStockStatusFilter] = useState("all");
+  const [stockDateFrom, setStockDateFrom] = useState("");
+  const [stockDateTo, setStockDateTo] = useState("");
   const [stockPage, setStockPage] = useState(1);
   const STOCK_PAGE_SIZE = 10;
 
   const { warehouseSummary, isSummaryLoading } = useInventory({
     warehouse_id: selectedWarehouseId ?? undefined,
+    date_from: stockDateFrom || undefined,
+    date_to: stockDateTo || undefined,
   });
 
   const allStockItems = warehouseSummary?.items || [];
@@ -710,7 +751,7 @@ export function ReportsPage({ initialReport = "stock_summary" }) {
       {activeReport === "stock_summary" && (
         <div className="space-y-4">
           {/* Summary StatCards */}
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
             <StatCard
               label="Total Catalog Products"
               value={isSummaryLoading ? "..." : stockSummaryStats.total_products || allStockItems.length}
@@ -718,24 +759,56 @@ export function ReportsPage({ initialReport = "stock_summary" }) {
               tint="blue"
             />
             <StatCard
-              label="Total In-Stock Units"
-              value={isSummaryLoading ? "..." : stockSummaryStats.total_in_stock ?? 0}
+              label={stockDateFrom ? "Opening Stock (Prior)" : "Opening Stock"}
+              value={isSummaryLoading ? "..." : (stockSummaryStats.total_opening_stock ?? 0)}
               icon={Package}
+              tint="indigo"
+            />
+            <StatCard
+              label="Period Inbound (+)"
+              value={isSummaryLoading ? "..." : (stockSummaryStats.total_stock_in ?? stockSummaryStats.total_received ?? 0)}
+              icon={TrendingDown}
               tint="emerald"
             />
             <StatCard
-              label="Total Inbound Received"
-              value={isSummaryLoading ? "..." : stockSummaryStats.total_stock_in ?? stockSummaryStats.total_received ?? 0}
-              icon={TrendingDown}
-              tint="purple"
-            />
-            <StatCard
-              label="Total Outbound Dispatched"
-              value={isSummaryLoading ? "..." : stockSummaryStats.total_stock_out ?? stockSummaryStats.total_customer ?? 0}
+              label="Period Outbound (-)"
+              value={isSummaryLoading ? "..." : (stockSummaryStats.total_stock_out ?? stockSummaryStats.total_customer ?? 0)}
               icon={ArrowLeftRight}
               tint="amber"
             />
+            <StatCard
+              label={stockDateTo ? "Closing Stock (Cumulative)" : "Current In-Stock"}
+              value={isSummaryLoading ? "..." : (stockSummaryStats.total_closing_stock ?? stockSummaryStats.total_in_stock ?? 0)}
+              icon={Package}
+              tint="purple"
+            />
           </div>
+
+          {/* Active Periodic Cumulative Filter Banner */}
+          {(stockDateFrom || stockDateTo) && (
+            <div className="flex flex-wrap items-center justify-between gap-2 px-3.5 py-2 bg-indigo-50/80 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800 rounded-lg text-xs font-medium text-indigo-900 dark:text-indigo-200">
+              <div className="flex items-center gap-2">
+                <Calendar size={15} className="shrink-0 text-indigo-600 dark:text-indigo-400" />
+                <span>
+                  Cumulative Stock Period: <strong>{stockDateFrom ? formatBDDate(stockDateFrom) : "Beginning of time"}</strong> to <strong>{stockDateTo ? formatBDDate(stockDateTo) : "Present"}</strong>
+                  <span className="text-slate-500 dark:text-slate-400 ml-1.5 font-normal">
+                    (Formula: Opening Stock + Period Inbound - Period Outbound = Closing Stock)
+                  </span>
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setStockDateFrom("");
+                  setStockDateTo("");
+                  setStockPage(1);
+                }}
+                className="text-xs font-semibold text-indigo-700 dark:text-indigo-300 hover:underline transition-colors"
+              >
+                Clear Date Filter
+              </button>
+            </div>
+          )}
 
           {/* Toolbar */}
           <Toolbar
@@ -750,11 +823,12 @@ export function ReportsPage({ initialReport = "stock_summary" }) {
                   { label: "Category", key: "category_name" },
                   { label: "Tracking Type", key: "tracking_type" },
                   { label: "Warehouse", key: "warehouse_name" },
-                  { label: "Current In-Stock", key: "in_stock_qty" },
-                  { label: "Total Stock In", key: "stock_in_qty" },
-                  { label: "Total Stock Out", key: "stock_out_qty" },
+                  { label: "Opening Stock", key: "opening_stock_qty" },
+                  { label: "Stock In", key: "stock_in_qty" },
+                  { label: "Stock Out", key: "stock_out_qty" },
                   { label: "Transfers In", key: "transfer_in_qty" },
                   { label: "Transfers Out", key: "transfer_out_qty" },
+                  { label: "Closing Stock", key: "closing_stock_qty" },
                 ]}
               />
             }
@@ -772,6 +846,12 @@ export function ReportsPage({ initialReport = "stock_summary" }) {
               onProduct={(v) => { setStockProductId(v); setStockPage(1); }}
               onBarcode={(v) => { setStockBarcode(v); setStockPage(1); }}
               onName={(v) => { setStockName(v); setStockPage(1); }}
+            />
+            <DateRangeFilter
+              fromDate={stockDateFrom}
+              toDate={stockDateTo}
+              onFromDateChange={(v) => { setStockDateFrom(v); setStockPage(1); }}
+              onToDateChange={(v) => { setStockDateTo(v); setStockPage(1); }}
             />
             <Select
               value={stockTrackingFilter}
@@ -806,42 +886,43 @@ export function ReportsPage({ initialReport = "stock_summary" }) {
                     <Th>Category</Th>
                     <Th>Tracking</Th>
                     <Th>Warehouse</Th>
-                    <Th className="text-right">In Stock</Th>
+                    <Th className="text-right">Opening Stock</Th>
                     <Th className="text-right">Stock In</Th>
                     <Th className="text-right">Stock Out</Th>
-                    <Th className="text-center">Transfers</Th>
+                    <Th className="text-center">Transfers (In/Out)</Th>
+                    <Th className="text-right">Closing Stock</Th>
                     <Th className="text-right">Action</Th>
                   </tr>
                 </thead>
                 <tbody>
                   {isSummaryLoading ? (
                     <tr>
-                      <td colSpan={10} className="text-center py-10 text-sm text-slate-400">
+                      <td colSpan={11} className="text-center py-10 text-sm text-slate-400">
                         Loading stock summary report...
                       </td>
                     </tr>
                   ) : filteredStockSummary.length === 0 ? (
-                    <EmptyTable cols={10} message="No stock summary records found." />
+                    <EmptyTable cols={11} message="No stock summary records found." />
                   ) : (
                     pagedStockItems.map((item, idx) => (
-                      <tr key={`${item.product_id}-${item.warehouse_id}-${idx}`} className="hover:bg-slate-50/60">
+                      <tr key={`${item.product_id}-${item.warehouse_id}-${idx}`} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40">
                         <Td mono className="text-xs text-slate-400">
                           {(stockPage - 1) * STOCK_PAGE_SIZE + idx + 1}
                         </Td>
                         <Td>
                           <div>
-                            <div className="font-semibold text-slate-900 text-sm">
+                            <div className="font-semibold text-slate-900 dark:text-slate-100 text-sm">
                               {item.product_name}
                             </div>
                             {item.product_code && (
-                              <span className="text-[11px] font-mono text-slate-500">
+                              <span className="text-[11px] font-mono text-slate-500 dark:text-slate-400">
                                 {item.product_code}
                               </span>
                             )}
                           </div>
                         </Td>
                         <Td>
-                          <span className="inline-flex items-center gap-1 text-xs text-slate-700 font-medium">
+                          <span className="inline-flex items-center gap-1 text-xs text-slate-700 dark:text-slate-300 font-medium">
                             <Tag size={12} className="text-slate-400" />
                             {item.category_name || "General"}
                           </span>
@@ -852,34 +933,37 @@ export function ReportsPage({ initialReport = "stock_summary" }) {
                           </Badge>
                         </Td>
                         <Td>
-                          <span className="text-xs font-medium text-slate-700 flex items-center gap-1">
+                          <span className="text-xs font-medium text-slate-700 dark:text-slate-300 flex items-center gap-1">
                             <Building2 size={12} className="text-slate-400" />
                             {item.warehouse_name}
                           </span>
                         </Td>
+                        <Td className="text-right font-mono text-xs text-slate-700 dark:text-slate-300 font-medium">
+                          {item.opening_stock_qty ?? 0}
+                        </Td>
+                        <Td className="text-right font-mono text-xs text-emerald-600 dark:text-emerald-400 font-medium">
+                          +{item.stock_in_qty ?? 0}
+                        </Td>
+                        <Td className="text-right font-mono text-xs text-amber-600 dark:text-amber-400 font-medium">
+                          -{item.stock_out_qty ?? 0}
+                        </Td>
+                        <Td className="text-center font-mono text-xs text-slate-500 dark:text-slate-400">
+                          +{item.transfer_in_qty || 0} / -{item.transfer_out_qty || 0}
+                        </Td>
                         <Td className="text-right">
                           <span
                             className={`font-mono font-bold text-sm ${
-                              (item.in_stock_qty || 0) > 0 ? "text-emerald-700" : "text-rose-600"
+                              (item.closing_stock_qty ?? item.in_stock_qty ?? 0) > 0 ? "text-emerald-700 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"
                             }`}
                           >
-                            {item.in_stock_qty ?? 0}
+                            {item.closing_stock_qty ?? item.in_stock_qty ?? 0}
                           </span>
-                        </Td>
-                        <Td className="text-right font-mono text-xs text-slate-600">
-                          +{item.stock_in_qty ?? 0}
-                        </Td>
-                        <Td className="text-right font-mono text-xs text-slate-600">
-                          -{item.stock_out_qty ?? 0}
-                        </Td>
-                        <Td className="text-center font-mono text-xs text-slate-500">
-                          +{item.transfer_in_qty || 0} / -{item.transfer_out_qty || 0}
                         </Td>
                         <Td className="text-right">
                           <button
                             type="button"
                             onClick={() => setDetailItem(item)}
-                            className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-2.5 py-1 rounded-md transition-colors"
+                            className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-2.5 py-1 rounded-md transition-colors dark:bg-blue-950/40 dark:hover:bg-blue-900/50 dark:border-blue-800 dark:text-blue-300"
                           >
                             <Eye size={12} />
                             Details

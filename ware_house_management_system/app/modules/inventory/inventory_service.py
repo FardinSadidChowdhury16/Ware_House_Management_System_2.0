@@ -772,13 +772,51 @@ class InventoryService:
         warehouse_id: Optional[int] = None,
         search: Optional[str] = None,
         tracking_type: Optional[str] = None,
+        date_from: Optional[str] = None,
+        date_to: Optional[str] = None,
         allowed_warehouse_ids: Optional[List[int]] = None,
     ):
+        from datetime import datetime, time, timedelta
         from app.models.warehouse import Warehouse
         from app.models.product import Product, ProductVariant
         from app.models.inventory import SerializedItem, BulkWarehouseStock, ItemStatus, StockMovement, MovementType
-        from app.models.service import ServiceTicket
+        from app.models.service import ServiceTicket, ServiceTicketStatus
         from sqlalchemy import or_, func
+
+        # Parse string dates safely
+        d_from = None
+        if date_from and str(date_from).strip():
+            clean_from = str(date_from).strip().split("T")[0]
+            try:
+                d_from = datetime.strptime(clean_from, "%Y-%m-%d").date()
+            except Exception:
+                try:
+                    d_from = datetime.fromisoformat(str(date_from).strip()).date()
+                except Exception:
+                    d_from = None
+
+        d_to = None
+        if date_to and str(date_to).strip():
+            clean_to = str(date_to).strip().split("T")[0]
+            try:
+                d_to = datetime.strptime(clean_to, "%Y-%m-%d").date()
+            except Exception:
+                try:
+                    d_to = datetime.fromisoformat(str(date_to).strip()).date()
+                except Exception:
+                    d_to = None
+
+        dt_from = None
+        if d_from:
+            # Offset by -6 hours to accommodate Bangladesh timezone (UTC+6)
+            dt_from = datetime.combine(d_from, time.min) - timedelta(hours=6)
+
+        dt_to = None
+        if d_to:
+            # Offset by +6 hours to cover end of day in Bangladesh timezone (UTC+6)
+            dt_to = datetime.combine(d_to + timedelta(days=1), time.min) + timedelta(hours=6)
+
+        has_date_filter = bool(dt_from or dt_to)
 
         w_query = self.db.query(Warehouse)
         if allowed_warehouse_ids is not None:
@@ -793,7 +831,9 @@ class InventoryService:
             return {
                 "selected_warehouse": None,
                 "summary": {
+                    "total_opening_stock": 0,
                     "total_in_stock": 0,
+                    "total_closing_stock": 0,
                     "total_received": 0,
                     "total_customer": 0,
                     "total_servicing": 0,
@@ -803,6 +843,7 @@ class InventoryService:
                     "total_transfer_in": 0,
                     "total_transfer_out": 0,
                     "total_transfers": 0,
+                    "has_date_filter": has_date_filter,
                 },
                 "items": [],
             }
@@ -840,7 +881,54 @@ class InventoryService:
         if hasattr(MovementType, "REPLACE_OUT"):
             pure_outbound_types.append(MovementType.REPLACE_OUT)
 
-        # 1. Pre-aggregate Pure Stock In movements: (product_id, to_warehouse_id) -> total_qty
+        all_inbound_types = list(pure_inbound_types) + [MovementType.TRANSFER_IN]
+        all_outbound_types = list(pure_outbound_types) + [MovementType.TRANSFER_OUT]
+
+        # -------------------------------------------------------------
+        # 1. Opening Stock Calculation (Cumulative Prior Movements: created_at < dt_from)
+        # -------------------------------------------------------------
+        opening_stock_map = {}
+        if dt_from:
+            prior_in_query = self.db.query(
+                StockMovement.product_id,
+                StockMovement.to_warehouse_id,
+                func.coalesce(func.sum(StockMovement.quantity), 0)
+            ).filter(
+                StockMovement.movement_type.in_(all_inbound_types),
+                StockMovement.to_warehouse_id.isnot(None),
+                StockMovement.created_at < dt_from,
+            )
+            if target_wh_ids is not None:
+                prior_in_query = prior_in_query.filter(StockMovement.to_warehouse_id.in_(target_wh_ids))
+
+            prior_in_map = {}
+            for pid, wid, qty in prior_in_query.group_by(StockMovement.product_id, StockMovement.to_warehouse_id).all():
+                prior_in_map[(pid, wid)] = int(qty)
+
+            prior_out_query = self.db.query(
+                StockMovement.product_id,
+                StockMovement.from_warehouse_id,
+                func.coalesce(func.sum(StockMovement.quantity), 0)
+            ).filter(
+                StockMovement.movement_type.in_(all_outbound_types),
+                StockMovement.from_warehouse_id.isnot(None),
+                StockMovement.created_at < dt_from,
+            )
+            if target_wh_ids is not None:
+                prior_out_query = prior_out_query.filter(StockMovement.from_warehouse_id.in_(target_wh_ids))
+
+            prior_out_map = {}
+            for pid, wid, qty in prior_out_query.group_by(StockMovement.product_id, StockMovement.from_warehouse_id).all():
+                prior_out_map[(pid, wid)] = int(qty)
+
+            for key in (set(prior_in_map.keys()) | set(prior_out_map.keys())):
+                p_in = prior_in_map.get(key, 0)
+                p_out = prior_out_map.get(key, 0)
+                opening_stock_map[key] = max(0, p_in - p_out)
+
+        # -------------------------------------------------------------
+        # 2. Period Movements (dt_from <= created_at < dt_to)
+        # -------------------------------------------------------------
         stock_in_query = self.db.query(
             StockMovement.product_id,
             StockMovement.to_warehouse_id,
@@ -851,11 +939,15 @@ class InventoryService:
         )
         if target_wh_ids is not None:
             stock_in_query = stock_in_query.filter(StockMovement.to_warehouse_id.in_(target_wh_ids))
+        if dt_from:
+            stock_in_query = stock_in_query.filter(StockMovement.created_at >= dt_from)
+        if dt_to:
+            stock_in_query = stock_in_query.filter(StockMovement.created_at < dt_to)
+
         stock_in_map = {}
         for pid, wid, qty in stock_in_query.group_by(StockMovement.product_id, StockMovement.to_warehouse_id).all():
             stock_in_map[(pid, wid)] = int(qty)
 
-        # 2. Pre-aggregate Transfer In movements: (product_id, to_warehouse_id) -> total_qty
         transfer_in_query = self.db.query(
             StockMovement.product_id,
             StockMovement.to_warehouse_id,
@@ -866,11 +958,15 @@ class InventoryService:
         )
         if target_wh_ids is not None:
             transfer_in_query = transfer_in_query.filter(StockMovement.to_warehouse_id.in_(target_wh_ids))
+        if dt_from:
+            transfer_in_query = transfer_in_query.filter(StockMovement.created_at >= dt_from)
+        if dt_to:
+            transfer_in_query = transfer_in_query.filter(StockMovement.created_at < dt_to)
+
         transfer_in_map = {}
         for pid, wid, qty in transfer_in_query.group_by(StockMovement.product_id, StockMovement.to_warehouse_id).all():
             transfer_in_map[(pid, wid)] = int(qty)
 
-        # 3. Pre-aggregate Pure Stock Out movements: (product_id, from_warehouse_id) -> total_qty
         stock_out_query = self.db.query(
             StockMovement.product_id,
             StockMovement.from_warehouse_id,
@@ -881,11 +977,15 @@ class InventoryService:
         )
         if target_wh_ids is not None:
             stock_out_query = stock_out_query.filter(StockMovement.from_warehouse_id.in_(target_wh_ids))
+        if dt_from:
+            stock_out_query = stock_out_query.filter(StockMovement.created_at >= dt_from)
+        if dt_to:
+            stock_out_query = stock_out_query.filter(StockMovement.created_at < dt_to)
+
         stock_out_map = {}
         for pid, wid, qty in stock_out_query.group_by(StockMovement.product_id, StockMovement.from_warehouse_id).all():
             stock_out_map[(pid, wid)] = int(qty)
 
-        # 4. Pre-aggregate Transfer Out movements: (product_id, from_warehouse_id) -> total_qty
         transfer_out_query = self.db.query(
             StockMovement.product_id,
             StockMovement.from_warehouse_id,
@@ -896,11 +996,15 @@ class InventoryService:
         )
         if target_wh_ids is not None:
             transfer_out_query = transfer_out_query.filter(StockMovement.from_warehouse_id.in_(target_wh_ids))
+        if dt_from:
+            transfer_out_query = transfer_out_query.filter(StockMovement.created_at >= dt_from)
+        if dt_to:
+            transfer_out_query = transfer_out_query.filter(StockMovement.created_at < dt_to)
+
         transfer_out_map = {}
         for pid, wid, qty in transfer_out_query.group_by(StockMovement.product_id, StockMovement.from_warehouse_id).all():
             transfer_out_map[(pid, wid)] = int(qty)
 
-        # 5. Pre-aggregate Customer Sales (SALE_OUT): (product_id, from_warehouse_id) -> total_qty
         customer_out_query = self.db.query(
             StockMovement.product_id,
             StockMovement.from_warehouse_id,
@@ -911,12 +1015,18 @@ class InventoryService:
         )
         if target_wh_ids is not None:
             customer_out_query = customer_out_query.filter(StockMovement.from_warehouse_id.in_(target_wh_ids))
+        if dt_from:
+            customer_out_query = customer_out_query.filter(StockMovement.created_at >= dt_from)
+        if dt_to:
+            customer_out_query = customer_out_query.filter(StockMovement.created_at < dt_to)
+
         customer_map = {}
         for pid, wid, qty in customer_out_query.group_by(StockMovement.product_id, StockMovement.from_warehouse_id).all():
             customer_map[(pid, wid)] = int(qty)
 
-        # 3. Pre-aggregate Servicing tickets: (product_id, warehouse_id) -> count
-        from app.models.service import ServiceTicketStatus
+        # -------------------------------------------------------------
+        # 3. Servicing tickets within period
+        # -------------------------------------------------------------
         srv_ticket_query = self.db.query(
             ServiceTicket.product_id,
             ServiceTicket.warehouse_id,
@@ -928,11 +1038,18 @@ class InventoryService:
         )
         if target_wh_ids is not None:
             srv_ticket_query = srv_ticket_query.filter(ServiceTicket.warehouse_id.in_(target_wh_ids))
+        if dt_from:
+            srv_ticket_query = srv_ticket_query.filter(ServiceTicket.created_at >= dt_from)
+        if dt_to:
+            srv_ticket_query = srv_ticket_query.filter(ServiceTicket.created_at < dt_to)
+
         srv_ticket_map = {}
         for pid, wid, count in srv_ticket_query.group_by(ServiceTicket.product_id, ServiceTicket.warehouse_id).all():
             srv_ticket_map[(pid, wid)] = int(count)
 
-        # 4. Serialized Items query
+        # -------------------------------------------------------------
+        # 4. Current Serialized Items and Bulk Stock query
+        # -------------------------------------------------------------
         si_query = self.db.query(SerializedItem).filter(
             SerializedItem.warehouse_id.isnot(None),
             SerializedItem.status != ItemStatus.SOLD,
@@ -941,7 +1058,6 @@ class InventoryService:
             si_query = si_query.filter(SerializedItem.warehouse_id.in_(target_wh_ids))
         serialized_items = si_query.all()
 
-        # 5. Bulk Stock query
         bulk_query = self.db.query(BulkWarehouseStock).filter(BulkWarehouseStock.warehouse_id.isnot(None))
         if target_wh_ids is not None:
             bulk_query = bulk_query.filter(BulkWarehouseStock.warehouse_id.in_(target_wh_ids))
@@ -949,33 +1065,32 @@ class InventoryService:
 
         grouped = {}
 
-        # Process Serialized Items
-        for si in serialized_items:
-            if si.product_id not in prod_map:
-                continue
-            p = prod_map[si.product_id]
-            wh = wh_map.get(si.warehouse_id)
-            if not wh:
-                continue
-
-            key = (si.product_id, si.warehouse_id)
+        def get_or_create_entry(pid, wid):
+            key = (pid, wid)
             if key not in grouped:
+                p = prod_map.get(pid)
+                wh = wh_map.get(wid)
+                if not p or not wh:
+                    return None
                 s_in = stock_in_map.get(key, 0)
                 t_in = transfer_in_map.get(key, 0)
                 s_out = stock_out_map.get(key, 0)
                 t_out = transfer_out_map.get(key, 0)
                 c_out = customer_map.get(key, 0)
                 srv = srv_ticket_map.get(key, 0)
+                op_stock = opening_stock_map.get(key, 0)
+
                 grouped[key] = {
                     "product_id": p.id,
                     "product_name": p.name,
                     "product_code": p.product_code,
                     "category_name": p.category.name if p.category else "General",
-                    "tracking_type": "serialized",
+                    "tracking_type": p.tracking_type.value if hasattr(p.tracking_type, "value") else str(p.tracking_type),
                     "min_stock_level": p.min_stock_level or 0,
                     "warehouse_id": wh.id,
                     "warehouse_name": wh.name,
                     "warehouse_code": wh.code,
+                    "opening_stock_qty": op_stock,
                     "in_stock_qty": 0,
                     "stock_in_qty": s_in,
                     "transfer_in_qty": t_in,
@@ -985,10 +1100,19 @@ class InventoryService:
                     "customer_qty": c_out,
                     "stock_out_qty": s_out,
                     "servicing_qty": srv,
+                    "closing_stock_qty": 0,
                     "variant_counts": {},
                     "serialized_items": [],
                 }
-            g = grouped[key]
+            return grouped[key]
+
+        # Process Serialized Items
+        for si in serialized_items:
+            if si.product_id not in prod_map or si.warehouse_id not in wh_map:
+                continue
+            g = get_or_create_entry(si.product_id, si.warehouse_id)
+            if not g:
+                continue
             st = si.status.value if hasattr(si.status, "value") else str(si.status)
             if st == "in_stock":
                 g["in_stock_qty"] += 1
@@ -1019,45 +1143,12 @@ class InventoryService:
 
         # Process Bulk Stocks
         for bs in bulk_stocks:
-            if bs.product_id not in prod_map:
+            if bs.product_id not in prod_map or bs.warehouse_id not in wh_map:
                 continue
-            p = prod_map[bs.product_id]
-            wh = wh_map.get(bs.warehouse_id)
-            if not wh:
-                continue
-
             qty = max(0, bs.quantity)
-            key = (bs.product_id, bs.warehouse_id)
-            if key not in grouped:
-                s_in = stock_in_map.get(key, 0)
-                t_in = transfer_in_map.get(key, 0)
-                s_out = stock_out_map.get(key, 0)
-                t_out = transfer_out_map.get(key, 0)
-                c_out = customer_map.get(key, 0)
-                srv = srv_ticket_map.get(key, 0)
-                grouped[key] = {
-                    "product_id": p.id,
-                    "product_name": p.name,
-                    "product_code": p.product_code,
-                    "category_name": p.category.name if p.category else "General",
-                    "tracking_type": "bulk",
-                    "min_stock_level": p.min_stock_level or 0,
-                    "warehouse_id": wh.id,
-                    "warehouse_name": wh.name,
-                    "warehouse_code": wh.code,
-                    "in_stock_qty": 0,
-                    "stock_in_qty": s_in,
-                    "transfer_in_qty": t_in,
-                    "transfer_out_qty": t_out,
-                    "transfer_qty": t_in + t_out,
-                    "total_received_qty": s_in + t_in,
-                    "customer_qty": c_out,
-                    "stock_out_qty": s_out,
-                    "servicing_qty": srv,
-                    "variant_counts": {},
-                    "serialized_items": [],
-                }
-            g = grouped[key]
+            g = get_or_create_entry(bs.product_id, bs.warehouse_id)
+            if not g:
+                continue
             g["in_stock_qty"] += qty
 
             v = var_map.get(bs.variant_id)
@@ -1071,22 +1162,10 @@ class InventoryService:
             if v_name and v_name not in names:
                 names.append(v_name)
 
-        # Ensure total_received_qty is at least in_stock_qty + stock_out_qty + servicing_qty + transfer_out_qty
-        for key, g in grouped.items():
-            minimum_received = (
-                g["in_stock_qty"]
-                + g["stock_out_qty"]
-                + g["servicing_qty"]
-                + g["transfer_out_qty"]
-            )
-            if g["total_received_qty"] < minimum_received:
-                diff = minimum_received - g["total_received_qty"]
-                g["stock_in_qty"] += diff
-                g["total_received_qty"] = minimum_received
-
-        # Also add any products that have movements or servicing in that warehouse
+        # Also add any products that have opening stock, movements, or servicing
         all_wh_keys = (
-            set(stock_in_map.keys())
+            set(opening_stock_map.keys())
+            | set(stock_in_map.keys())
             | set(transfer_in_map.keys())
             | set(stock_out_map.keys())
             | set(transfer_out_map.keys())
@@ -1098,54 +1177,43 @@ class InventoryService:
                 continue
             if target_wh_ids is not None and wid not in target_wh_ids:
                 continue
-            if key not in grouped:
-                p = prod_map[pid]
-                wh = wh_map[wid]
-                s_in = stock_in_map.get(key, 0)
-                t_in = transfer_in_map.get(key, 0)
-                s_out = stock_out_map.get(key, 0)
-                t_out = transfer_out_map.get(key, 0)
-                c_out = customer_map.get(key, 0)
-                srv = srv_ticket_map.get(key, 0)
-                if s_in > 0 or t_in > 0 or s_out > 0 or t_out > 0 or srv > 0 or c_out > 0:
-                    tot_rec = s_in + t_in
-                    min_rec = s_out + srv + t_out
-                    if tot_rec < min_rec:
-                        s_in += (min_rec - tot_rec)
-                        tot_rec = min_rec
-                    grouped[key] = {
-                        "product_id": p.id,
-                        "product_name": p.name,
-                        "product_code": p.product_code,
-                        "category_name": p.category.name if p.category else "General",
-                        "tracking_type": p.tracking_type.value if hasattr(p.tracking_type, "value") else str(p.tracking_type),
-                        "warehouse_id": wh.id,
-                        "warehouse_name": wh.name,
-                        "warehouse_code": wh.code,
-                        "in_stock_qty": 0,
-                        "stock_in_qty": s_in,
-                        "transfer_in_qty": t_in,
-                        "transfer_out_qty": t_out,
-                        "transfer_qty": t_in + t_out,
-                        "total_received_qty": tot_rec,
-                        "customer_qty": c_out,
-                        "stock_out_qty": s_out,
-                        "servicing_qty": srv,
-                        "variant_counts": {},
-                        "serialized_items": [],
-                    }
+            get_or_create_entry(pid, wid)
+
+        # Finalize closing stock and in_stock_qty for each item
+        for key, g in grouped.items():
+            if has_date_filter:
+                period_in = g["stock_in_qty"] + g["transfer_in_qty"]
+                period_out = g["stock_out_qty"] + g["transfer_out_qty"]
+                closing = max(0, g["opening_stock_qty"] + period_in - period_out)
+                g["closing_stock_qty"] = closing
+                g["in_stock_qty"] = closing
+            else:
+                minimum_received = (
+                    g["in_stock_qty"]
+                    + g["stock_out_qty"]
+                    + g["servicing_qty"]
+                    + g["transfer_out_qty"]
+                )
+                if g["total_received_qty"] < minimum_received:
+                    diff = minimum_received - g["total_received_qty"]
+                    g["stock_in_qty"] += diff
+                    g["total_received_qty"] = minimum_received
+                g["opening_stock_qty"] = 0
+                g["closing_stock_qty"] = g["in_stock_qty"]
 
         items = list(grouped.values())
 
         for item in items:
             item["variants"] = [
                 {"variant_name": k, "quantity": v}
-                for k, v in item.pop("variant_counts").items()
+                for k, v in item.pop("variant_counts", {}).items()
             ]
 
         summary = {
             "total_products": len(set(it["product_id"] for it in items)),
+            "total_opening_stock": sum(it.get("opening_stock_qty", 0) for it in items),
             "total_in_stock": sum(it["in_stock_qty"] for it in items),
+            "total_closing_stock": sum(it.get("closing_stock_qty", it["in_stock_qty"]) for it in items),
             "total_stock_in": sum(it["stock_in_qty"] for it in items),
             "total_stock_out": sum(it["stock_out_qty"] for it in items),
             "total_transfer_in": sum(it["transfer_in_qty"] for it in items),
@@ -1158,6 +1226,9 @@ class InventoryService:
             "total_received": sum(it["total_received_qty"] for it in items),
             "total_customer": sum(it["customer_qty"] for it in items),
             "total_servicing": sum(it["servicing_qty"] for it in items),
+            "date_from": date_from,
+            "date_to": date_to,
+            "has_date_filter": has_date_filter,
         }
 
         selected_wh_info = None
