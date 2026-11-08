@@ -709,10 +709,17 @@ export function ProductsPage() {
         v.is_stocked_in ||
         Boolean(v.warehouse_name || (Array.isArray(v.assigned_warehouses) && v.assigned_warehouses.length > 0))
       );
+    } else if (variantStockFilter === "sold") {
+      list = list.filter((v) =>
+        !v.is_stocked_in &&
+        !Boolean(v.warehouse_name || (Array.isArray(v.assigned_warehouses) && v.assigned_warehouses.length > 0)) &&
+        Boolean(v.is_sold || v.isSold || v.stock_status === "sold")
+      );
     } else if (variantStockFilter === "not_stocked_in") {
       list = list.filter((v) =>
         !v.is_stocked_in &&
-        !Boolean(v.warehouse_name || (Array.isArray(v.assigned_warehouses) && v.assigned_warehouses.length > 0))
+        !Boolean(v.warehouse_name || (Array.isArray(v.assigned_warehouses) && v.assigned_warehouses.length > 0)) &&
+        !Boolean(v.is_sold || v.isSold || v.stock_status === "sold")
       );
     }
     if (!variantSearch.trim()) return list;
@@ -867,7 +874,9 @@ export function ProductsPage() {
             v.warehouse_name ||
             (Array.isArray(v.assigned_warehouses) && v.assigned_warehouses.length > 0)
           );
-          return isStocked ? "Stocked In" : "Not Stocked In";
+          if (isStocked) return "Stocked In";
+          if (v.is_sold || v.isSold || v.stock_status === "sold") return "Sold";
+          return "Not Stocked In";
         },
       },
       {
@@ -979,10 +988,17 @@ export function ProductsPage() {
           v.is_stocked_in ||
           Boolean(v.warehouse_name || (Array.isArray(v.assigned_warehouses) && v.assigned_warehouses.length > 0))
         );
+      } else if (variantStockFilter === "sold") {
+        list = list.filter((v) =>
+          !v.is_stocked_in &&
+          !Boolean(v.warehouse_name || (Array.isArray(v.assigned_warehouses) && v.assigned_warehouses.length > 0)) &&
+          Boolean(v.is_sold || v.isSold || v.stock_status === "sold")
+        );
       } else if (variantStockFilter === "not_stocked_in") {
         list = list.filter((v) =>
           !v.is_stocked_in &&
-          !Boolean(v.warehouse_name || (Array.isArray(v.assigned_warehouses) && v.assigned_warehouses.length > 0))
+          !Boolean(v.warehouse_name || (Array.isArray(v.assigned_warehouses) && v.assigned_warehouses.length > 0)) &&
+          !Boolean(v.is_sold || v.isSold || v.stock_status === "sold")
         );
       }
       if (variantSearch.trim()) {
@@ -1541,6 +1557,7 @@ export function ProductsPage() {
                     { value: "all", label: "All Items" },
                     { value: "stocked_in", label: "Stocked In" },
                     { value: "not_stocked_in", label: "Not Stocked In" },
+                    { value: "sold", label: "Sold" },
                   ]}
                   className={`w-auto min-w-36 text-xs py-1 ${
                     variantStockFilter !== "all" ? "border-amber-400 bg-amber-50 text-amber-800" : ""
@@ -1677,15 +1694,21 @@ export function ProductsPage() {
                           v.warehouse_name ||
                           (Array.isArray(v.assigned_warehouses) && v.assigned_warehouses.length > 0)
                         );
+                        const isSold = Boolean(v.is_sold || v.isSold || v.stock_status === "sold");
                         return (
                           <Td key={column.key}>
                             {isStocked ? (
-                              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+                              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800">
                                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
                                 Stocked In
                               </span>
+                            ) : isSold ? (
+                              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-800">
+                                <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
+                                Sold
+                              </span>
                             ) : (
-                              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200">
+                              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800">
                                 <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
                                 Not Stocked In
                               </span>

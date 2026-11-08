@@ -1,7 +1,7 @@
 import logging
 import re
 from typing import List, Optional, Tuple
-from sqlalchemy import or_, cast, String
+from sqlalchemy import or_, and_, cast, String
 from sqlalchemy.orm import Session
 from app.models.product import (
     Product,
@@ -11,7 +11,7 @@ from app.models.product import (
     ProductVariantAttributeValue,
     TaxRule,
 )
-from app.models.inventory import StockMovement, SerializedItem, BulkWarehouseStock
+from app.models.inventory import StockMovement, SerializedItem, BulkWarehouseStock, ItemStatus, MovementType
 from app.models.warehouse import Warehouse
 from app.models.party import Supplier, Customer
 from app.models.access_control import User
@@ -98,14 +98,23 @@ def enrich_variants_with_warehouses(
         si_query_conds.append(SerializedItem.barcode.in_(all_barcodes))
         si_query_conds.append(SerializedItem.serial_number.in_(all_barcodes))
 
+    var_has_sold_si = {}
     if si_query_conds:
         try:
-            matched_sis = db.query(SerializedItem.id, SerializedItem.variant_id, SerializedItem.barcode, SerializedItem.serial_number).filter(or_(*si_query_conds)).all()
-            for si_id, si_var_id, si_barcode, si_sn in matched_sis:
+            matched_sis = db.query(
+                SerializedItem.id,
+                SerializedItem.variant_id,
+                SerializedItem.barcode,
+                SerializedItem.serial_number,
+                SerializedItem.status,
+            ).filter(or_(*si_query_conds)).all()
+            for si_id, si_var_id, si_barcode, si_sn, si_status in matched_sis:
                 target_v_id = si_var_id if (si_var_id and si_var_id in variant_map) else (barcode_to_id.get(si_barcode) or barcode_to_id.get(si_sn))
                 if target_v_id:
                     var_si_ids[target_v_id].add(si_id)
                     s_id_to_var_id[si_id] = target_v_id
+                    if si_status == ItemStatus.SOLD or str(getattr(si_status, "value", si_status)).lower() == "sold":
+                        var_has_sold_si[target_v_id] = True
                     if si_barcode:
                         var_barcodes[target_v_id].add(si_barcode)
                         s_barcode_to_var_id[si_barcode] = target_v_id
@@ -241,6 +250,20 @@ def enrich_variants_with_warehouses(
         ]
         stock_out_with_attachment = next((m for m in stock_outs if m.get("attachment_url")), None)
         latest_stock_out = stock_out_with_attachment or (stock_outs[0] if stock_outs else None)
+
+        # Refine stock_status to accurately reflect: stocked_in, sold, or not_stocked_in
+        if v.is_stocked_in:
+            v.stock_status = "stocked_in"
+            v.is_stocked_in = True
+            v.is_sold = False
+        elif stock_outs or latest_stock_out or var_has_sold_si.get(v.id):
+            v.stock_status = "sold"
+            v.is_stocked_in = False
+            v.is_sold = True
+        else:
+            v.stock_status = "not_stocked_in"
+            v.is_stocked_in = False
+            v.is_sold = False
 
         ticket_with_att = next((t for t in var_tix if t.get("delivery_attachment_url") or t.get("attachment_url")), None)
         latest_ticket = ticket_with_att or (var_tix[0] if var_tix else None)
@@ -596,10 +619,25 @@ class ProductsRepository:
             )
             is_stocked_condition = or_(s_exists.exists(), b_exists.exists())
 
+            sold_s_exists = self.db.query(SerializedItem.id).filter(
+                SerializedItem.product_id == Product.id,
+                SerializedItem.status == ItemStatus.SOLD,
+            )
+            sold_m_exists = self.db.query(StockMovement.id).filter(
+                StockMovement.product_id == Product.id,
+                or_(
+                    StockMovement.movement_type == MovementType.SALE_OUT,
+                    cast(StockMovement.movement_type, String).in_(["sale_out", "SALE_OUT"]),
+                ),
+            )
+            has_sold_condition = and_(~is_stocked_condition, or_(sold_s_exists.exists(), sold_m_exists.exists()))
+
             if stock_status.lower() in ("stocked_in", "in_stock"):
                 query = query.filter(is_stocked_condition)
+            elif stock_status.lower() in ("sold", "is_sold"):
+                query = query.filter(has_sold_condition)
             elif stock_status.lower() in ("not_stocked_in", "not_in_stock", "pending_stock"):
-                query = query.filter(~is_stocked_condition)
+                query = query.filter(and_(~is_stocked_condition, ~or_(sold_s_exists.exists(), sold_m_exists.exists())))
 
         total = query.count()
         items = query.order_by(Product.id.desc()).offset((page - 1) * page_size).limit(page_size).all()
@@ -663,6 +701,30 @@ class ProductsRepository:
         )
         is_unassigned = ~is_in_any_wh
 
+        s_sold_subq = self.db.query(SerializedItem.variant_id).filter(
+            SerializedItem.status == ItemStatus.SOLD,
+            SerializedItem.variant_id.isnot(None),
+        )
+        s_sold_barcodes = self.db.query(SerializedItem.barcode).filter(
+            SerializedItem.status == ItemStatus.SOLD,
+            SerializedItem.barcode.isnot(None),
+        )
+        m_sold_subq = self.db.query(StockMovement.variant_id).filter(
+            or_(
+                StockMovement.movement_type == MovementType.SALE_OUT,
+                cast(StockMovement.movement_type, String).in_(["sale_out", "SALE_OUT"]),
+            ),
+            StockMovement.variant_id.isnot(None),
+        )
+        is_sold = and_(
+            is_unassigned,
+            or_(
+                ProductVariant.id.in_(s_sold_subq),
+                ProductVariant.barcode.in_(s_sold_barcodes),
+                ProductVariant.id.in_(m_sold_subq),
+            ),
+        )
+
         # Warehouse filter / scoping:
         if allowed_warehouse_ids is not None:
             # Non-admin user
@@ -691,26 +753,39 @@ class ProductsRepository:
             query = query.filter(or_(is_in_target_wh, is_unassigned))
         elif warehouse_id is not None:
             # Admin user filtered by warehouse
-            s_subq = self.db.query(SerializedItem.variant_id).filter(
-                SerializedItem.warehouse_id == warehouse_id,
-                SerializedItem.variant_id.isnot(None)
-            )
-            b_subq = self.db.query(BulkWarehouseStock.variant_id).filter(
-                BulkWarehouseStock.warehouse_id == warehouse_id,
-                BulkWarehouseStock.quantity > 0,
-                BulkWarehouseStock.variant_id.isnot(None)
-            )
-            s_barcodes = self.db.query(SerializedItem.barcode).filter(
-                SerializedItem.warehouse_id == warehouse_id,
-                SerializedItem.barcode.isnot(None)
-            )
-            query = query.filter(
-                or_(
-                    ProductVariant.id.in_(s_subq),
-                    ProductVariant.id.in_(b_subq),
-                    ProductVariant.barcode.in_(s_barcodes),
+            if stock_status and stock_status.lower() in ("sold", "is_sold"):
+                m_wh_sold = self.db.query(StockMovement.variant_id).filter(
+                    StockMovement.from_warehouse_id == warehouse_id,
+                    or_(
+                        StockMovement.movement_type == MovementType.SALE_OUT,
+                        cast(StockMovement.movement_type, String).in_(["sale_out", "SALE_OUT"]),
+                    ),
+                    StockMovement.variant_id.isnot(None),
                 )
-            )
+                query = query.filter(ProductVariant.id.in_(m_wh_sold))
+            elif stock_status and stock_status.lower() in ("not_stocked_in", "not_in_stock", "pending_stock"):
+                query = query.filter(and_(is_unassigned, ~is_sold))
+            else:
+                s_subq = self.db.query(SerializedItem.variant_id).filter(
+                    SerializedItem.warehouse_id == warehouse_id,
+                    SerializedItem.variant_id.isnot(None)
+                )
+                b_subq = self.db.query(BulkWarehouseStock.variant_id).filter(
+                    BulkWarehouseStock.warehouse_id == warehouse_id,
+                    BulkWarehouseStock.quantity > 0,
+                    BulkWarehouseStock.variant_id.isnot(None)
+                )
+                s_barcodes = self.db.query(SerializedItem.barcode).filter(
+                    SerializedItem.warehouse_id == warehouse_id,
+                    SerializedItem.barcode.isnot(None)
+                )
+                query = query.filter(
+                    or_(
+                        ProductVariant.id.in_(s_subq),
+                        ProductVariant.id.in_(b_subq),
+                        ProductVariant.barcode.in_(s_barcodes),
+                    )
+                )
 
         # Stock status filter:
         if stock_status and stock_status.lower() not in ("all", ""):
@@ -718,17 +793,15 @@ class ProductsRepository:
                 if allowed_warehouse_ids is not None:
                     query = query.filter(is_in_target_wh)
                 elif warehouse_id is not None:
-                    query = query.filter(
-                        or_(
-                            ProductVariant.id.in_(s_subq),
-                            ProductVariant.id.in_(b_subq),
-                            ProductVariant.barcode.in_(s_barcodes),
-                        )
-                    )
+                    # Already filtered by warehouse above
+                    pass
                 else:
                     query = query.filter(is_in_any_wh)
+            elif stock_status.lower() in ("sold", "is_sold"):
+                if warehouse_id is None:
+                    query = query.filter(is_sold)
             elif stock_status.lower() in ("not_stocked_in", "not_in_stock", "pending_stock"):
-                query = query.filter(is_unassigned)
+                query = query.filter(and_(is_unassigned, ~is_sold))
 
         total = query.count()
         items = query.order_by(ProductVariant.id.desc()).offset((page - 1) * page_size).limit(page_size).all()

@@ -224,6 +224,7 @@ export function ItemDetailsModal({
       item.warehouse_name ||
       (Array.isArray(item.assigned_warehouses) && item.assigned_warehouses.length > 0)
   );
+  const isSold = Boolean(item.is_sold || item.isSold || item.stock_status === "sold");
 
   return (
     <Modal
@@ -274,11 +275,15 @@ export function ItemDetailsModal({
           </div>
           <div className="flex items-center gap-2">
             {isStockedIn ? (
-              <span className="inline-flex items-center gap-1 text-emerald-700 font-medium text-xs bg-emerald-50 border border-emerald-200 rounded-full px-2.5 py-0.5">
+              <span className="inline-flex items-center gap-1 text-emerald-700 font-medium text-xs bg-emerald-50 border border-emerald-200 rounded-full px-2.5 py-0.5 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Stocked In
               </span>
+            ) : isSold ? (
+              <span className="inline-flex items-center gap-1 text-rose-700 font-medium text-xs bg-rose-50 border border-rose-200 rounded-full px-2.5 py-0.5 dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-800">
+                <span className="w-1.5 h-1.5 rounded-full bg-rose-500" /> Sold
+              </span>
             ) : (
-              <span className="inline-flex items-center gap-1 text-amber-700 font-medium text-xs bg-amber-50 border border-amber-200 rounded-full px-2.5 py-0.5">
+              <span className="inline-flex items-center gap-1 text-amber-700 font-medium text-xs bg-amber-50 border border-amber-200 rounded-full px-2.5 py-0.5 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800">
                 <span className="w-1.5 h-1.5 rounded-full bg-amber-400" /> Not Stocked In
               </span>
             )}

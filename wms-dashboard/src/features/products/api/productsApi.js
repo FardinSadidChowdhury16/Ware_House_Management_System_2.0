@@ -6,6 +6,12 @@ function normalizeVariant(v) {
     v.is_stocked_in ??
     (v.warehouse_name || (Array.isArray(v.assigned_warehouses) && v.assigned_warehouses.length > 0))
   );
+  const isSold = Boolean(
+    v.stock_status === "sold" ||
+    v.is_sold ||
+    (!isStockedIn && (v.stock_out_details || (Array.isArray(v.movements) && v.movements.some((m) => String(m.movement_type || "").toLowerCase().includes("sale") || String(m.movement_type || "").toLowerCase().includes("out")))))
+  );
+  const stockStatus = isStockedIn ? "stocked_in" : isSold ? "sold" : (v.stock_status || "not_stocked_in");
 
   return {
     ...v,
@@ -20,7 +26,8 @@ function normalizeVariant(v) {
     warehouse_name: v.warehouse_name || null,
     assigned_warehouses: Array.isArray(v.assigned_warehouses) ? v.assigned_warehouses : [],
     is_stocked_in: isStockedIn,
-    stock_status: v.stock_status || (isStockedIn ? "stocked_in" : "not_stocked_in"),
+    is_sold: isSold,
+    stock_status: stockStatus,
     warranty_start_date: v.warranty_start_date || null,
     warranty_end_date: v.warranty_end_date || null,
     attribute_values: v.attribute_values || [],

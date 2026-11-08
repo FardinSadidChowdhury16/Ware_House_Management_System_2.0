@@ -178,11 +178,21 @@ class ProductVariant(Base):
     def stock_status(self) -> str:
         if hasattr(self, "_stock_status"):
             return self._stock_status
-        return "stocked_in" if self.is_stocked_in else "not_stocked_in"
+        return "stocked_in" if self.is_stocked_in else ("sold" if self.is_sold else "not_stocked_in")
 
     @stock_status.setter
     def stock_status(self, value):
         self._stock_status = value
+
+    @property
+    def is_sold(self) -> bool:
+        if hasattr(self, "_is_sold"):
+            return self._is_sold
+        return getattr(self, "_stock_status", "") == "sold"
+
+    @is_sold.setter
+    def is_sold(self, value):
+        self._is_sold = value
 
     @property
     def stock_in_details(self):

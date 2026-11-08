@@ -140,6 +140,7 @@ class ProductVariantResponse(ProductVariantBase):
     warehouse_name: Optional[str] = None
     assigned_warehouses: Optional[List[str]] = []
     is_stocked_in: Optional[bool] = None
+    is_sold: Optional[bool] = False
     stock_status: Optional[str] = None
     stock_in_details: Optional[dict] = None
     stock_out_details: Optional[dict] = None
