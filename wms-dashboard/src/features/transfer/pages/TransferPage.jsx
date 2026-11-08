@@ -36,6 +36,7 @@ import {
   Toolbar,
   EmptyTable,
   Pagination,
+  Select,
   useToast,
   useConfirm,
   ExportCSVButton,
@@ -734,11 +735,14 @@ function TransferCreateModal({
               <label className="text-xs font-semibold text-slate-700 block mb-1">
                 Source Warehouse (From) <span className="text-red-500">*</span>
               </label>
-              <select
+              <Select
                 value={fromWarehouseId}
-                onChange={async (e) => {
-                  const newVal = e.target.value;
-                  // Clear items if warehouse changes to prevent invalid source units
+                placeholder="Select Source Warehouse"
+                options={sourceWarehouses.map((w) => ({
+                  value: String(w.id),
+                  label: `${w.name}${w.code ? ` (${w.code})` : ""}`,
+                }))}
+                onChange={async (newVal) => {
                   if (items.length > 0) {
                     const isConfirmed = await confirm({
                       title: "Change Source Warehouse",
@@ -755,35 +759,24 @@ function TransferCreateModal({
                     setToWarehouseId(nextDest ? String(nextDest.id) : "");
                   }
                 }}
-                className="w-full border border-slate-300 rounded-md px-3 py-2 text-xs text-slate-800 bg-white font-medium focus:outline-none focus:ring-2 focus:ring-slate-900"
-              >
-                <option value="">Select Source Warehouse</option>
-                {sourceWarehouses.map((w) => (
-                  <option key={w.id} value={String(w.id)}>
-                    📍 {w.name} {w.code ? `(${w.code})` : ""}
-                  </option>
-                ))}
-              </select>
+              />
             </div>
 
             <div>
               <label className="text-xs font-semibold text-slate-700 block mb-1">
                 Destination Warehouse (To) <span className="text-red-500">*</span>
               </label>
-              <select
+              <Select
                 value={toWarehouseId}
-                onChange={(e) => setToWarehouseId(e.target.value)}
-                className="w-full border border-slate-300 rounded-md px-3 py-2 text-xs text-slate-800 bg-white font-medium focus:outline-none focus:ring-2 focus:ring-slate-900"
-              >
-                <option value="">Select Destination Warehouse</option>
-                {destinationWarehouses
+                onChange={setToWarehouseId}
+                placeholder="Select Destination Warehouse"
+                options={destinationWarehouses
                   .filter((w) => String(w.id) !== String(fromWarehouseId))
-                  .map((w) => (
-                    <option key={w.id} value={String(w.id)}>
-                      🎯 {w.name} {w.code ? `(${w.code})` : ""}
-                    </option>
-                  ))}
-              </select>
+                  .map((w) => ({
+                    value: String(w.id),
+                    label: `${w.name}${w.code ? ` (${w.code})` : ""}`,
+                  }))}
+              />
             </div>
           </div>
 
@@ -901,18 +894,15 @@ function TransferCreateModal({
                   <label className="text-xs font-semibold text-slate-700 block mb-1">
                     Select Product
                   </label>
-                  <select
+                  <Select
                     value={selectedProductId}
-                    onChange={(e) => setSelectedProductId(e.target.value)}
-                    className="w-full border border-slate-300 rounded-md px-3 py-2 text-xs text-slate-800 bg-white font-medium focus:outline-none focus:ring-1 focus:ring-slate-900"
-                  >
-                    <option value="">Choose product...</option>
-                    {allProducts.map((p) => (
-                      <option key={p.id} value={String(p.id)}>
-                        {p.name} {p.product_code ? `(${p.product_code})` : ""}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={setSelectedProductId}
+                    placeholder="Choose product..."
+                    options={allProducts.map((p) => ({
+                      value: String(p.id),
+                      label: `${p.name}${p.product_code ? ` (${p.product_code})` : ""}`,
+                    }))}
+                  />
                 </div>
 
                 {currentSelectedProduct && (
@@ -1293,23 +1283,22 @@ export function TransferPage() {
           {sourceWarehouses && sourceWarehouses.length > 0 && (
             <div className="flex items-center gap-1.5 shrink-0">
               <span className="text-xs font-medium text-slate-500 whitespace-nowrap">Warehouse:</span>
-              <select
+              <Select
                 value={selectedWarehouseId ?? ""}
-                onChange={(e) => {
-                  const val = e.target.value ? Number(e.target.value) : null;
-                  selectWarehouse(val);
+                onChange={(v) => {
+                  selectWarehouse(v ? Number(v) : null);
                   setPage(1);
                   setDirectionFilter("all");
                 }}
-                className="border border-slate-200 rounded-md px-2.5 py-1.5 text-xs text-slate-700 bg-white font-medium focus:outline-none focus:ring-1 focus:ring-slate-900"
-              >
-                <option value="">All Warehouses</option>
-                {sourceWarehouses.map((w) => (
-                  <option key={w.id} value={w.id}>
-                    {w.name} {w.code ? `(${w.code})` : ""}
-                  </option>
-                ))}
-              </select>
+                options={[
+                  { value: "", label: "All Warehouses" },
+                  ...sourceWarehouses.map((w) => ({
+                    value: String(w.id),
+                    label: `${w.name}${w.code ? ` (${w.code})` : ""}`,
+                  })),
+                ]}
+                className="w-auto min-w-44 text-xs py-1.5"
+              />
             </div>
           )}
 

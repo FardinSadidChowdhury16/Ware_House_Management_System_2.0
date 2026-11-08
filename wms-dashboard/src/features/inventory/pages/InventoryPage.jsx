@@ -23,6 +23,7 @@ import {
   EmptyTable,
   Pagination,
   ExportCSVButton,
+  Select,
 } from "../../../components/ui/index.js";
 import { useWarehouseFilter } from "../../../app/context/WarehouseFilterContext.jsx";
 import { useInventory } from "../hooks/useInventory.js";
@@ -189,15 +190,16 @@ function ProductStockDetailModal({ item, onClose }) {
                   placeholder="Search serial / barcode..."
                   className="px-2.5 py-1 text-xs border border-slate-200 rounded-md focus:outline-none focus:ring-1 focus:ring-slate-900 bg-white"
                 />
-                <select
+                <Select
                   value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value)}
-                  className="px-2 py-1 text-xs border border-slate-200 rounded-md focus:outline-none focus:ring-1 focus:ring-slate-900 bg-white font-medium"
-                >
-                  <option value="all">All Statuses</option>
-                  <option value="in_stock">In Stock</option>
-                  <option value="under_service">In Servicing</option>
-                </select>
+                  onChange={setStatusFilter}
+                  options={[
+                    { value: "all", label: "All Statuses" },
+                    { value: "in_stock", label: "In Stock" },
+                    { value: "under_service", label: "In Servicing" },
+                  ]}
+                  className="w-auto min-w-36 text-xs py-1"
+                />
                 <ExportCSVButton
                   filename={`inventory-units-${item.product_name || "product"}`}
                   columns={[
@@ -466,35 +468,37 @@ export function InventoryPage() {
           {/* Tracking Type Filter */}
           <div className="flex items-center gap-1.5">
             <span className="text-xs font-medium text-slate-500 whitespace-nowrap">Tracking:</span>
-            <select
+            <Select
               value={trackingTypeFilter}
-              onChange={(e) => {
-                setTrackingTypeFilter(e.target.value);
+              onChange={(v) => {
+                setTrackingTypeFilter(v);
                 setCurrentPage(1);
               }}
-              className="border border-slate-200 rounded-md px-2.5 py-1.5 text-xs text-slate-700 bg-white font-medium focus:outline-none focus:ring-1 focus:ring-slate-900"
-            >
-              <option value="all">All Tracking Types</option>
-              <option value="serialized">Serialized Units</option>
-              <option value="bulk">Bulk Stock</option>
-            </select>
+              options={[
+                { value: "all", label: "All Tracking Types" },
+                { value: "serialized", label: "Serialized Units" },
+                { value: "bulk", label: "Bulk Stock" },
+              ]}
+              className="w-auto min-w-40 text-xs py-1.5"
+            />
           </div>
 
           {/* Stock Status Filter */}
           <div className="flex items-center gap-1.5">
             <span className="text-xs font-medium text-slate-500 whitespace-nowrap">Status:</span>
-            <select
+            <Select
               value={stockStatusFilter}
-              onChange={(e) => {
-                setStockStatusFilter(e.target.value);
+              onChange={(v) => {
+                setStockStatusFilter(v);
                 setCurrentPage(1);
               }}
-              className="border border-slate-200 rounded-md px-2.5 py-1.5 text-xs text-slate-700 bg-white font-medium focus:outline-none focus:ring-1 focus:ring-slate-900"
-            >
-              <option value="all">All Availability</option>
-              <option value="in_stock">In Stock Only (&gt; 0)</option>
-              <option value="out_of_stock">Out of Stock (= 0)</option>
-            </select>
+              options={[
+                { value: "all", label: "All Availability" },
+                { value: "in_stock", label: "In Stock Only (> 0)" },
+                { value: "out_of_stock", label: "Out of Stock (= 0)" },
+              ]}
+              className="w-auto min-w-44 text-xs py-1.5"
+            />
           </div>
         </div>
       </Toolbar>

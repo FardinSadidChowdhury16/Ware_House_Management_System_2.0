@@ -26,6 +26,7 @@ import {
   DollarSign,
   Filter,
   ArrowUpRight,
+  Wrench,
 } from "lucide-react";
 import {
   Badge,
@@ -38,15 +39,16 @@ import {
   Toolbar,
   SearchBox,
   DateRangeFilter,
-  FilterChips,
   EmptyTable,
   Modal,
   Pagination,
+  Select,
   ExportCSVButton,
 } from "../../../components/ui/index.js";
 import { useWarehouseFilter } from "../../../app/context/WarehouseFilterContext.jsx";
 import { useInventory } from "../../inventory/hooks/useInventory.js";
 import { inventoryApi } from "../../inventory/api/inventoryApi.js";
+import { returnsApi } from "../../returns/api/returnsApi.js";
 import { productsApi } from "../../products/api/productsApi.js";
 import { formatBDDateTime, formatBDDate } from "../../../shared/utils/dateUtils.js";
 
@@ -68,7 +70,31 @@ const REPORT_HEADERS = {
     title: "Stock Sell Report",
     subtitle: "Customer sales dispatches, delivery references, and sold quantity breakdown.",
   },
+  servicing_report: {
+    title: "Servicing Report",
+    subtitle: "Tickets received, in repair, finished, and delivered for the selected period and warehouse.",
+  },
 };
+
+const SERVICE_STATUS_LABEL = {
+  idle: "Received / Pending",
+  on_repairing: "In Repair",
+  work_finish: "Work Finished",
+  delivered: "Delivered",
+};
+
+function serviceStatusLabel(status) {
+  const key = String(status || "").toLowerCase();
+  return SERVICE_STATUS_LABEL[key] || status || "—";
+}
+
+function serviceStatusClass(status) {
+  const key = String(status || "").toLowerCase();
+  if (key === "delivered") return "bg-emerald-50 text-emerald-700 border-emerald-100";
+  if (key === "work_finish") return "bg-sky-50 text-sky-700 border-sky-100";
+  if (key === "on_repairing") return "bg-blue-50 text-blue-700 border-blue-100";
+  return "bg-amber-50 text-amber-700 border-amber-100";
+}
 
 // ─── Movement Type Color Badge Helper ─────────────────────────────────────────
 function MovementBadge({ type }) {
@@ -129,6 +155,62 @@ function getDatePresetRange(preset) {
     return { from: format(start), to: format(end) };
   }
   return { from: "", to: "" };
+}
+
+const PERIOD_OPTIONS = [
+  { value: "all", label: "All Time" },
+  { value: "today", label: "Today" },
+  { value: "yesterday", label: "Yesterday" },
+  { value: "last_7", label: "Last 7 Days" },
+  { value: "this_month", label: "This Month" },
+  { value: "last_month", label: "Last Month" },
+  { value: "custom", label: "Custom Range" },
+];
+
+function matchesReportIdentity(item, { productId, barcode, name }) {
+  if (productId && String(item.product_id) !== String(productId)) return false;
+  const barcodeQuery = String(barcode || "").trim().toLowerCase();
+  if (barcodeQuery) {
+    const codes = [
+      item.barcode,
+      item.product_code,
+      item.serial_number,
+      ...(item.barcodes || []),
+      ...(item.serialized_items || []).flatMap((row) => [row.barcode, row.serial_number]),
+    ];
+    if (!codes.some((value) => String(value || "").toLowerCase().includes(barcodeQuery))) return false;
+  }
+  const nameQuery = String(name || "").trim().toLowerCase();
+  if (nameQuery) {
+    const names = [
+      item.product_name,
+      item.item_name,
+      item.variant_name,
+      item.customer_name,
+      ...(item.item_names || []),
+      ...Object.keys(item.variant_counts || {}),
+    ];
+    if (!names.some((value) => String(value || "").toLowerCase().includes(nameQuery))) return false;
+  }
+  return true;
+}
+
+function ReportIdentityFilters({ productId, barcode, name, onProduct, onBarcode, onName, products }) {
+  return (
+    <>
+      <Select
+        value={productId}
+        onChange={onProduct}
+        options={[
+          { value: "", label: "All Products" },
+          ...products.map((product) => ({ value: String(product.id), label: product.name })),
+        ]}
+        className="w-auto min-w-44 text-xs py-1.5"
+      />
+      <SearchBox placeholder="Barcode" value={barcode} onChange={onBarcode} className="min-w-36 max-w-44" />
+      <SearchBox placeholder="Name" value={name} onChange={onName} className="min-w-36 max-w-44" />
+    </>
+  );
 }
 
 // ─── Product Stock Detail Modal ──────────────────────────────────────────────
@@ -297,6 +379,7 @@ export function ReportsPage({ initialReport = "stock_summary" }) {
     if (pathname.includes("inventory-movement")) return "movement_report";
     if (pathname.includes("low-stock")) return "low_stock_report";
     if (pathname.includes("stock-sell")) return "stock_sell_report";
+    if (pathname.includes("servicing")) return "servicing_report";
     return "stock_summary";
   };
 
@@ -328,6 +411,9 @@ export function ReportsPage({ initialReport = "stock_summary" }) {
   // 1. STOCK SUMMARY & LOW STOCK DATA (from useInventory)
   // ─────────────────────────────────────────────────────────────────────────────
   const [stockSearch, setStockSearch] = useState("");
+  const [stockProductId, setStockProductId] = useState("");
+  const [stockBarcode, setStockBarcode] = useState("");
+  const [stockName, setStockName] = useState("");
   const [stockTrackingFilter, setStockTrackingFilter] = useState("all");
   const [stockStatusFilter, setStockStatusFilter] = useState("all");
   const [stockPage, setStockPage] = useState(1);
@@ -361,8 +447,10 @@ export function ReportsPage({ initialReport = "stock_summary" }) {
           it.warehouse_name?.toLowerCase().includes(q)
       );
     }
-    return list;
-  }, [allStockItems, stockTrackingFilter, stockStatusFilter, stockSearch]);
+    return list.filter((it) =>
+      matchesReportIdentity(it, { productId: stockProductId, barcode: stockBarcode, name: stockName })
+    );
+  }, [allStockItems, stockTrackingFilter, stockStatusFilter, stockSearch, stockProductId, stockBarcode, stockName]);
 
   const pagedStockItems = useMemo(() => {
     const start = (stockPage - 1) * STOCK_PAGE_SIZE;
@@ -373,6 +461,9 @@ export function ReportsPage({ initialReport = "stock_summary" }) {
   // 2. INVENTORY MOVEMENT REPORT DATA (from backend /inventory/movements)
   // ─────────────────────────────────────────────────────────────────────────────
   const [movementSearch, setMovementSearch] = useState("");
+  const [movementProductId, setMovementProductId] = useState("");
+  const [movementBarcode, setMovementBarcode] = useState("");
+  const [movementName, setMovementName] = useState("");
   const [movementTypeFilter, setMovementTypeFilter] = useState("");
   const [movementDateFrom, setMovementDateFrom] = useState("");
   const [movementDateTo, setMovementDateTo] = useState("");
@@ -384,6 +475,9 @@ export function ReportsPage({ initialReport = "stock_summary" }) {
     page_size: MOVEMENT_PAGE_SIZE,
     warehouse_id: selectedWarehouseId || undefined,
     movement_type: movementTypeFilter || undefined,
+    product_id: movementProductId || undefined,
+    barcode: movementBarcode.trim() || undefined,
+    name: movementName.trim() || undefined,
     date_from: movementDateFrom || undefined,
     date_to: movementDateTo || undefined,
     search: movementSearch.trim() || undefined,
@@ -404,6 +498,9 @@ export function ReportsPage({ initialReport = "stock_summary" }) {
   // 3. LOW STOCK REPORT DATA
   // ─────────────────────────────────────────────────────────────────────────────
   const [lowStockSearch, setLowStockSearch] = useState("");
+  const [lowStockProductId, setLowStockProductId] = useState("");
+  const [lowStockBarcode, setLowStockBarcode] = useState("");
+  const [lowStockName, setLowStockName] = useState("");
   const [lowStockSeverity, setLowStockSeverity] = useState("all"); // 'all' | 'out_of_stock' | 'low'
   const [lowStockThresholdMode, setLowStockThresholdMode] = useState("min_stock"); // 'min_stock' | '5' | '10'
   const [lowStockPage, setLowStockPage] = useState(1);
@@ -447,8 +544,15 @@ export function ReportsPage({ initialReport = "stock_summary" }) {
           it.category_name?.toLowerCase().includes(q) ||
           it.warehouse_name?.toLowerCase().includes(q)
         );
-      });
-  }, [allStockItems, lowStockThresholdMode, lowStockSeverity, lowStockSearch]);
+      })
+      .filter((it) =>
+        matchesReportIdentity(it, {
+          productId: lowStockProductId,
+          barcode: lowStockBarcode,
+          name: lowStockName,
+        })
+      );
+  }, [allStockItems, lowStockThresholdMode, lowStockSeverity, lowStockSearch, lowStockProductId, lowStockBarcode, lowStockName]);
 
   const pagedLowStockItems = useMemo(() => {
     const start = (lowStockPage - 1) * LOW_STOCK_PAGE_SIZE;
@@ -459,7 +563,21 @@ export function ReportsPage({ initialReport = "stock_summary" }) {
   // 4. STOCK SELL REPORT DATA (sale_out movements & sales analytics)
   // ─────────────────────────────────────────────────────────────────────────────
   const [sellViewMode, setSellViewMode] = useState("item_summary"); // 'item_summary' | 'transactions' | 'category_breakdown'
+
+  const [serviceDatePreset, setServiceDatePreset] = useState("all");
+  const [serviceDateFrom, setServiceDateFrom] = useState("");
+  const [serviceDateTo, setServiceDateTo] = useState("");
+  const [serviceStatus, setServiceStatus] = useState("");
+  const [serviceProductId, setServiceProductId] = useState("");
+  const [serviceBarcode, setServiceBarcode] = useState("");
+  const [serviceName, setServiceName] = useState("");
+  const [serviceSearch, setServiceSearch] = useState("");
+  const [servicePage, setServicePage] = useState(1);
+  const SERVICE_PAGE_SIZE = 20;
   const [sellSearch, setSellSearch] = useState("");
+  const [sellProductId, setSellProductId] = useState("");
+  const [sellBarcode, setSellBarcode] = useState("");
+  const [sellName, setSellName] = useState("");
   const [sellCategoryFilter, setSellCategoryFilter] = useState("");
   const [sellDatePreset, setSellDatePreset] = useState("all");
   const [sellDateFrom, setSellDateFrom] = useState("");
@@ -474,11 +592,21 @@ export function ReportsPage({ initialReport = "stock_summary" }) {
     staleTime: 60 * 1000,
   });
 
+  const { data: reportProductsResult } = useQuery({
+    queryKey: ["report-product-options"],
+    queryFn: () => productsApi.listProducts({ page: 1, page_size: 500 }),
+    staleTime: 60 * 1000,
+  });
+  const reportProducts = reportProductsResult?.items || [];
+
   const sellParams = {
     page: sellPage,
     page_size: SELL_PAGE_SIZE,
     warehouse_id: selectedWarehouseId || undefined,
     category_id: sellCategoryFilter ? Number(sellCategoryFilter) : undefined,
+    product_id: sellProductId || undefined,
+    barcode: sellBarcode.trim() || undefined,
+    name: sellName.trim() || undefined,
     date_from: sellDateFrom || undefined,
     date_to: sellDateTo || undefined,
     search: sellSearch.trim() || undefined,
@@ -508,10 +636,50 @@ export function ReportsPage({ initialReport = "stock_summary" }) {
 
   const handleDatePreset = (presetId) => {
     setSellDatePreset(presetId);
+    if (presetId === "custom") return;
     const range = getDatePresetRange(presetId);
     setSellDateFrom(range.from);
     setSellDateTo(range.to);
     setSellPage(1);
+  };
+
+  const serviceParams = {
+    page: servicePage,
+    page_size: SERVICE_PAGE_SIZE,
+    warehouse_id: selectedWarehouseId || undefined,
+    status: serviceStatus || undefined,
+    product_id: serviceProductId || undefined,
+    barcode: serviceBarcode.trim() || undefined,
+    name: serviceName.trim() || undefined,
+    date_from: serviceDateFrom || undefined,
+    date_to: serviceDateTo || undefined,
+    search: serviceSearch.trim() || undefined,
+  };
+
+  const { data: serviceReportData, isLoading: isServiceLoading } = useQuery({
+    queryKey: ["reports", "servicing", serviceParams],
+    queryFn: () => returnsApi.listTickets(serviceParams),
+    enabled: activeReport === "servicing_report",
+    staleTime: 10 * 1000,
+  });
+
+  const serviceStats = serviceReportData?.stats || {
+    total: 0,
+    idle: 0,
+    on_repairing: 0,
+    work_finish: 0,
+    delivered: 0,
+  };
+  const serviceItems = serviceReportData?.items || [];
+  const totalServiceTickets = serviceReportData?.total || 0;
+
+  const handleServiceDatePreset = (presetId) => {
+    setServiceDatePreset(presetId);
+    if (presetId === "custom") return;
+    const range = getDatePresetRange(presetId);
+    setServiceDateFrom(range.from);
+    setServiceDateTo(range.to);
+    setServicePage(1);
   };
 
   return (
@@ -596,23 +764,34 @@ export function ReportsPage({ initialReport = "stock_summary" }) {
               value={stockSearch}
               onChange={(v) => { setStockSearch(v); setStockPage(1); }}
             />
-            <FilterChips
+            <ReportIdentityFilters
+              products={reportProducts}
+              productId={stockProductId}
+              barcode={stockBarcode}
+              name={stockName}
+              onProduct={(v) => { setStockProductId(v); setStockPage(1); }}
+              onBarcode={(v) => { setStockBarcode(v); setStockPage(1); }}
+              onName={(v) => { setStockName(v); setStockPage(1); }}
+            />
+            <Select
+              value={stockTrackingFilter}
+              onChange={(v) => { setStockTrackingFilter(v); setStockPage(1); }}
               options={[
                 { label: "All Modes", value: "all" },
                 { label: "Serialized", value: "serialized" },
                 { label: "Bulk", value: "bulk" },
               ]}
-              value={stockTrackingFilter}
-              onChange={(v) => { setStockTrackingFilter(v); setStockPage(1); }}
+              className="w-auto min-w-36 text-xs py-1.5"
             />
-            <FilterChips
+            <Select
+              value={stockStatusFilter}
+              onChange={(v) => { setStockStatusFilter(v); setStockPage(1); }}
               options={[
                 { label: "All Stock", value: "all" },
                 { label: "In Stock (>0)", value: "in_stock" },
                 { label: "Out of Stock (0)", value: "out_of_stock" },
               ]}
-              value={stockStatusFilter}
-              onChange={(v) => { setStockStatusFilter(v); setStockPage(1); }}
+              className="w-auto min-w-40 text-xs py-1.5"
             />
           </Toolbar>
 
@@ -788,13 +967,24 @@ export function ReportsPage({ initialReport = "stock_summary" }) {
               value={movementSearch}
               onChange={(v) => { setMovementSearch(v); setMovementPage(1); }}
             />
+            <ReportIdentityFilters
+              products={reportProducts}
+              productId={movementProductId}
+              barcode={movementBarcode}
+              name={movementName}
+              onProduct={(v) => { setMovementProductId(v); setMovementPage(1); }}
+              onBarcode={(v) => { setMovementBarcode(v); setMovementPage(1); }}
+              onName={(v) => { setMovementName(v); setMovementPage(1); }}
+            />
             <DateRangeFilter
               fromDate={movementDateFrom}
               toDate={movementDateTo}
               onFromDateChange={(v) => { setMovementDateFrom(v); setMovementPage(1); }}
               onToDateChange={(v) => { setMovementDateTo(v); setMovementPage(1); }}
             />
-            <FilterChips
+            <Select
+              value={movementTypeFilter}
+              onChange={(v) => { setMovementTypeFilter(v); setMovementPage(1); }}
               options={[
                 { label: "All Movements", value: "" },
                 { label: "Purchase In", value: "purchase_in" },
@@ -804,8 +994,7 @@ export function ReportsPage({ initialReport = "stock_summary" }) {
                 { label: "Adjustment", value: "adjustment_in" },
                 { label: "Return In", value: "return_in" },
               ]}
-              value={movementTypeFilter}
-              onChange={(v) => { setMovementTypeFilter(v); setMovementPage(1); }}
+              className="w-auto min-w-40 text-xs py-1.5"
             />
           </Toolbar>
 
@@ -987,23 +1176,34 @@ export function ReportsPage({ initialReport = "stock_summary" }) {
               value={lowStockSearch}
               onChange={(v) => { setLowStockSearch(v); setLowStockPage(1); }}
             />
-            <FilterChips
+            <ReportIdentityFilters
+              products={reportProducts}
+              productId={lowStockProductId}
+              barcode={lowStockBarcode}
+              name={lowStockName}
+              onProduct={(v) => { setLowStockProductId(v); setLowStockPage(1); }}
+              onBarcode={(v) => { setLowStockBarcode(v); setLowStockPage(1); }}
+              onName={(v) => { setLowStockName(v); setLowStockPage(1); }}
+            />
+            <Select
+              value={lowStockSeverity}
+              onChange={(v) => { setLowStockSeverity(v); setLowStockPage(1); }}
               options={[
                 { label: "All Low Stock", value: "all" },
                 { label: "Out of Stock (0)", value: "out_of_stock" },
                 { label: "Warning Alert", value: "low" },
               ]}
-              value={lowStockSeverity}
-              onChange={(v) => { setLowStockSeverity(v); setLowStockPage(1); }}
+              className="w-auto min-w-40 text-xs py-1.5"
             />
-            <FilterChips
+            <Select
+              value={lowStockThresholdMode}
+              onChange={(v) => { setLowStockThresholdMode(v); setLowStockPage(1); }}
               options={[
                 { label: "Min Stock Rule", value: "min_stock" },
                 { label: "≤ 5 Units", value: "5" },
                 { label: "≤ 10 Units", value: "10" },
               ]}
-              value={lowStockThresholdMode}
-              onChange={(v) => { setLowStockThresholdMode(v); setLowStockPage(1); }}
+              className="w-auto min-w-40 text-xs py-1.5"
             />
           </Toolbar>
 
@@ -1154,35 +1354,14 @@ export function ReportsPage({ initialReport = "stock_summary" }) {
             />
           </div>
 
-          {/* 2. Date Presets Quick Filter Chips */}
-          <div className="flex items-center flex-wrap gap-1.5 p-2 bg-slate-100/80 dark:bg-slate-900/60 rounded-xl border border-slate-200/80 dark:border-slate-800 text-xs">
-            <span className="text-slate-500 font-semibold px-2 flex items-center gap-1">
-              <Calendar size={13} /> Quick Period:
-            </span>
-            {[
-              { id: "all", label: "All Time" },
-              { id: "today", label: "Today" },
-              { id: "yesterday", label: "Yesterday" },
-              { id: "last_7", label: "Last 7 Days" },
-              { id: "this_month", label: "This Month" },
-              { id: "last_month", label: "Last Month" },
-            ].map((preset) => {
-              const active = sellDatePreset === preset.id;
-              return (
-                <button
-                  key={preset.id}
-                  type="button"
-                  onClick={() => handleDatePreset(preset.id)}
-                  className={`px-3 py-1 rounded-lg font-medium transition-all cursor-pointer ${
-                    active
-                      ? "bg-emerald-600 text-white shadow-2xs font-semibold"
-                      : "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200/60 dark:hover:bg-slate-700/60 border border-slate-200/60 dark:border-slate-700"
-                  }`}
-                >
-                  {preset.label}
-                </button>
-              );
-            })}
+          <div className="flex items-center gap-2">
+            <Calendar size={14} className="text-slate-400 shrink-0" />
+            <Select
+              value={sellDatePreset}
+              onChange={handleDatePreset}
+              options={PERIOD_OPTIONS}
+              className="w-auto min-w-40 text-xs py-1.5"
+            />
           </div>
 
           {/* 3. Toolbar: Search, Category Filter, Custom Date Pickers, & CSV Export */}
@@ -1236,25 +1415,31 @@ export function ReportsPage({ initialReport = "stock_summary" }) {
               value={sellSearch}
               onChange={(v) => { setSellSearch(v); setSellPage(1); }}
             />
+            <ReportIdentityFilters
+              products={reportProducts}
+              productId={sellProductId}
+              barcode={sellBarcode}
+              name={sellName}
+              onProduct={(v) => { setSellProductId(v); setSellPage(1); }}
+              onBarcode={(v) => { setSellBarcode(v); setSellPage(1); }}
+              onName={(v) => { setSellName(v); setSellPage(1); }}
+            />
 
             {/* Category Dropdown */}
             <div className="flex items-center gap-1.5">
               <Filter size={14} className="text-slate-400 shrink-0" />
-              <select
+              <Select
                 value={sellCategoryFilter}
-                onChange={(e) => {
-                  setSellCategoryFilter(e.target.value);
+                onChange={(v) => {
+                  setSellCategoryFilter(v);
                   setSellPage(1);
                 }}
-                className="text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg px-2.5 py-1.5 text-slate-700 dark:text-slate-200 focus:outline-hidden focus:ring-1 focus:ring-emerald-500"
-              >
-                <option value="">All Categories</option>
-                {productCategories.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
+                options={[
+                  { value: "", label: "All Categories" },
+                  ...productCategories.map((c) => ({ value: String(c.id), label: c.name })),
+                ]}
+                className="w-auto min-w-40 text-xs py-1.5"
+              />
             </div>
 
             {/* Custom Date Range Filter */}
@@ -1656,6 +1841,193 @@ export function ReportsPage({ initialReport = "stock_summary" }) {
               </div>
             </Card>
           )}
+        </div>
+      )}
+
+      {activeReport === "servicing_report" && (
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+            <StatCard label="In Period" value={isServiceLoading ? "..." : serviceStats.total ?? 0} icon={Wrench} tint="purple" />
+            <StatCard label="Received / Pending" value={isServiceLoading ? "..." : serviceStats.idle ?? 0} icon={Clock} tint="amber" />
+            <StatCard label="In Repair" value={isServiceLoading ? "..." : serviceStats.on_repairing ?? 0} icon={Wrench} tint="blue" />
+            <StatCard label="Work Finished" value={isServiceLoading ? "..." : serviceStats.work_finish ?? 0} icon={CheckCircle2} tint="indigo" />
+            <StatCard label="Delivered" value={isServiceLoading ? "..." : serviceStats.delivered ?? 0} icon={Truck} tint="emerald" />
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Calendar size={14} className="text-slate-400 shrink-0" />
+            <Select
+              value={serviceDatePreset}
+              onChange={handleServiceDatePreset}
+              options={PERIOD_OPTIONS}
+              className="w-auto min-w-40 text-xs py-1.5"
+            />
+          </div>
+
+          <Toolbar
+            action={
+              <ExportCSVButton
+                  filename="servicing-report"
+                  columns={[
+                    { key: "ticket_number", label: "Ticket" },
+                    { key: "received_date", label: "Received" },
+                    { key: "status_label", label: "Status" },
+                    { key: "product_name", label: "Product" },
+                    { key: "item_name", label: "Item" },
+                    { key: "barcode", label: "Barcode" },
+                    { key: "customer_name", label: "Customer" },
+                    { key: "warehouse_name", label: "Warehouse" },
+                    { key: "issue_description", label: "Issue" },
+                    { key: "cost", label: "Cost" },
+                    { key: "completed_date", label: "Finished" },
+                    { key: "delivered_date", label: "Delivered" },
+                  ]}
+                  data={serviceItems.map((ticket) => ({
+                    ...ticket,
+                    status_label: serviceStatusLabel(ticket.status),
+                  }))}
+                />
+            }
+          >
+            <SearchBox
+              placeholder="Search ticket, product, barcode, customer..."
+              value={serviceSearch}
+              onChange={(v) => {
+                setServiceSearch(v);
+                setServicePage(1);
+              }}
+            />
+            <ReportIdentityFilters
+              products={reportProducts}
+              productId={serviceProductId}
+              barcode={serviceBarcode}
+              name={serviceName}
+              onProduct={(v) => { setServiceProductId(v); setServicePage(1); }}
+              onBarcode={(v) => { setServiceBarcode(v); setServicePage(1); }}
+              onName={(v) => { setServiceName(v); setServicePage(1); }}
+            />
+            <div className="flex items-center gap-1.5">
+              <Filter size={14} className="text-slate-400 shrink-0" />
+              <Select
+                value={serviceStatus}
+                onChange={(v) => {
+                  setServiceStatus(v);
+                  setServicePage(1);
+                }}
+                options={[
+                  { value: "", label: "All Statuses" },
+                  { value: "idle", label: "Received / Pending" },
+                  { value: "on_repairing", label: "In Repair" },
+                  { value: "work_finish", label: "Work Finished" },
+                  { value: "delivered", label: "Delivered" },
+                ]}
+                className="w-auto min-w-44 text-xs py-1.5"
+              />
+            </div>
+            <DateRangeFilter
+              fromDate={serviceDateFrom}
+              toDate={serviceDateTo}
+              onFromDateChange={(v) => {
+                setServiceDateFrom(v);
+                setServiceDatePreset("custom");
+                setServicePage(1);
+              }}
+              onToDateChange={(v) => {
+                setServiceDateTo(v);
+                setServiceDatePreset("custom");
+                setServicePage(1);
+              }}
+            />
+          </Toolbar>
+
+          <Card>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
+                <thead>
+                  <tr>
+                    <Th>Ticket</Th>
+                    <Th>Received</Th>
+                    <Th>Product</Th>
+                    <Th>Customer</Th>
+                    <Th>Warehouse</Th>
+                    <Th>Status</Th>
+                    <Th>Finished</Th>
+                    <Th>Delivered</Th>
+                    <Th className="text-right">Cost</Th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {isServiceLoading ? (
+                    <EmptyTable cols={9} message="Loading service tickets..." />
+                  ) : serviceItems.length === 0 ? (
+                    <EmptyTable cols={9} message="No service tickets in this period." />
+                  ) : (
+                    serviceItems.map((ticket) => (
+                      <tr key={ticket.id} className="border-t border-slate-100 dark:border-slate-800">
+                        <Td>
+                          <span className="font-mono text-xs font-semibold text-slate-800 dark:text-slate-100">
+                            {ticket.ticket_number}
+                          </span>
+                          {ticket.issue_description && (
+                            <span className="block text-[11px] text-slate-500 max-w-56 truncate">
+                              {ticket.issue_description}
+                            </span>
+                          )}
+                        </Td>
+                        <Td className="text-xs text-slate-600 dark:text-slate-300">
+                          {ticket.received_date ? formatBDDate(ticket.received_date) : "—"}
+                        </Td>
+                        <Td>
+                          <span className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                            {ticket.product_name}
+                          </span>
+                          {ticket.item_name && (
+                            <span className="block text-[11px] text-slate-500">{ticket.item_name}</span>
+                          )}
+                          {ticket.barcode && (
+                            <span className="block font-mono text-[11px] text-slate-400">{ticket.barcode}</span>
+                          )}
+                        </Td>
+                        <Td className="text-xs">
+                          <span className="font-medium text-slate-800 dark:text-slate-100">
+                            {ticket.customer_name || "—"}
+                          </span>
+                          {ticket.customer_phone && (
+                            <span className="block text-[11px] text-slate-500">{ticket.customer_phone}</span>
+                          )}
+                        </Td>
+                        <Td className="text-xs text-slate-600 dark:text-slate-300">
+                          {ticket.warehouse_name || "—"}
+                        </Td>
+                        <Td>
+                          <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-semibold ${serviceStatusClass(ticket.status)}`}>
+                            {serviceStatusLabel(ticket.status)}
+                          </span>
+                        </Td>
+                        <Td className="text-xs text-slate-600 dark:text-slate-300">
+                          {ticket.completed_date ? formatBDDateTime(ticket.completed_date) : "—"}
+                        </Td>
+                        <Td className="text-xs text-slate-600 dark:text-slate-300">
+                          {ticket.delivered_date ? formatBDDateTime(ticket.delivered_date) : "—"}
+                        </Td>
+                        <Td className="text-right font-mono text-xs text-slate-800 dark:text-slate-100">
+                          {formatBDT(ticket.cost)}
+                        </Td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+            <Pagination
+              page={servicePage}
+              pageSize={SERVICE_PAGE_SIZE}
+              total={totalServiceTickets}
+              totalPages={Math.ceil(totalServiceTickets / SERVICE_PAGE_SIZE) || 1}
+              onPageChange={setServicePage}
+              itemName="tickets"
+            />
+          </Card>
         </div>
       )}
 

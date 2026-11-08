@@ -101,6 +101,11 @@ def list_service_tickets(
     search: Optional[str] = None,
     status: Optional[str] = None,
     warehouse_id: Optional[int] = Query(None),
+    date_from: Optional[date] = Query(None),
+    date_to: Optional[date] = Query(None),
+    product_id: Optional[int] = Query(None),
+    barcode: Optional[str] = Query(None),
+    name: Optional[str] = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -115,7 +120,9 @@ def list_service_tickets(
             stats={"total": 0, "idle": 0, "on_repairing": 0, "work_finish": 0, "delivered": 0},
         )
     effective_warehouse_id = target_ids if target_ids is not None else warehouse_id
-    return ServicesController.get_tickets(db, page, page_size, search, status, effective_warehouse_id)
+    return ServicesController.get_tickets(
+        db, page, page_size, search, status, effective_warehouse_id, date_from, date_to, product_id, barcode, name
+    )
 
 
 @router.post("/tickets", response_model=ServiceTicketResponse, status_code=status.HTTP_201_CREATED, summary="Create a new service ticket")

@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
+import { Select } from "./Select.jsx";
 import {
   CalendarDays,
   ChevronLeft,
@@ -406,36 +407,18 @@ export function DateRangeFilter({
                       <ChevronLeft size={16} />
                     </button>
                     <div className="flex items-center gap-1">
-                      <select
-                        value={curMonthIdx}
-                        onChange={(e) =>
-                          setCurrentMonth(
-                            new Date(curYear, Number(e.target.value), 1)
-                          )
-                        }
-                        className="text-xs font-bold text-slate-800 bg-transparent hover:bg-slate-100 rounded px-1.5 py-0.5 border border-slate-200 outline-none cursor-pointer focus:ring-1 focus:ring-amber-500"
-                      >
-                        {monthsList.map((m, idx) => (
-                          <option key={m} value={idx}>
-                            {m}
-                          </option>
-                        ))}
-                      </select>
-                      <select
-                        value={curYear}
-                        onChange={(e) =>
-                          setCurrentMonth(
-                            new Date(Number(e.target.value), curMonthIdx, 1)
-                          )
-                        }
-                        className="text-xs font-bold text-slate-800 bg-transparent hover:bg-slate-100 rounded px-1.5 py-0.5 border border-slate-200 outline-none cursor-pointer focus:ring-1 focus:ring-amber-500"
-                      >
-                        {yearsList.map((y) => (
-                          <option key={y} value={y}>
-                            {y}
-                          </option>
-                        ))}
-                      </select>
+                      <Select
+                        value={String(curMonthIdx)}
+                        onChange={(v) => setCurrentMonth(new Date(curYear, Number(v), 1))}
+                        options={monthsList.map((m, idx) => ({ value: String(idx), label: m }))}
+                        className="w-auto min-w-28 text-xs py-1"
+                      />
+                      <Select
+                        value={String(curYear)}
+                        onChange={(v) => setCurrentMonth(new Date(Number(v), curMonthIdx, 1))}
+                        options={yearsList.map((y) => ({ value: String(y), label: String(y) }))}
+                        className="w-auto min-w-20 text-xs py-1"
+                      />
                     </div>
                     <button
                       type="button"

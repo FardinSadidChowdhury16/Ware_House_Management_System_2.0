@@ -32,6 +32,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { PERMISSIONS, PERMISSION_MODULE_GROUPS, formatPermissionLabel } from "../constants.js";
+import { Select } from "../../../components/ui/Select.jsx";
 
 const MODULE_ICON_MAP = {
   users: Users,
@@ -216,22 +217,12 @@ export function UserFormModal({
                   <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
                     Role / Authority Level
                   </label>
-                  <div className="relative">
-                    <Shield size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-                    <select
-                      value={form.role && form.role !== "None" ? form.role : ""}
-                      onChange={(e) => onChange({ ...form, role: e.target.value || "None" })}
-                      className="w-full border border-slate-200 rounded-lg pl-10 pr-8 py-2.5 text-sm bg-white font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-slate-900 transition-all cursor-pointer appearance-none"
-                    >
-                      <option value="">No Role Assigned (Restricted)</option>
-                      {roles.map((r) => (
-                        <option key={r.id || r.name} value={r.name}>
-                          {r.name}
-                        </option>
-                      ))}
-                    </select>
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none text-xs">▼</span>
-                  </div>
+                  <Select
+                    value={form.role && form.role !== "None" ? form.role : ""}
+                    onChange={(v) => onChange({ ...form, role: v || "None" })}
+                    placeholder="No Role Assigned (Restricted)"
+                    options={roles.map((r) => ({ value: r.name, label: r.name }))}
+                  />
                   <p className="text-[11px] text-slate-400 mt-1">Determines feature access and approval permissions.</p>
                 </div>
 

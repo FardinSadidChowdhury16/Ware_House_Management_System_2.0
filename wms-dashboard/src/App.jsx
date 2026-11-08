@@ -21,6 +21,7 @@ const NO_SECTION_HEADER_SECTIONS = [
   "report_movement",
   "report_low_stock",
   "report_stock_sell",
+  "report_servicing",
   "settings",
   "returns",
   "transfer",

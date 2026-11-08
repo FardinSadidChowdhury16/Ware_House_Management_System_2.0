@@ -317,19 +317,15 @@ export function StockMovementPage({ mode }) {
             </div>
           )}
           <Field label="Project / Customer tag (optional)">
-            <select value={form.tag} onChange={(e) => setForm({ ...form, tag: e.target.value })} className={inputCls}>
-              <option value="">No tag — warehouse stock only</option>
-              {projects.length > 0 && (
-                <optgroup label="Projects">
-                  {projects.map((p) => <option key={p.id} value={p.id}>{p.tag}</option>)}
-                </optgroup>
-              )}
-              {customers.length > 0 && (
-                <optgroup label="Customers">
-                  {customers.map((c) => <option key={c.id} value={c.id}>{c.tag}</option>)}
-                </optgroup>
-              )}
-            </select>
+            <Select
+              value={form.tag}
+              onChange={(v) => setForm({ ...form, tag: v })}
+              options={[
+                { value: "", label: "No tag — warehouse stock only" },
+                ...projects.map((p) => ({ value: String(p.id), label: p.tag, group: "Projects" })),
+                ...customers.map((c) => ({ value: String(c.id), label: c.tag, group: "Customers" })),
+              ]}
+            />
           </Field>
           <div className="flex items-center gap-2 text-sm text-amber-700 bg-amber-50 px-3 py-2 rounded-md">
             <AlertTriangle size={14} />This action requires approval before it's finalized

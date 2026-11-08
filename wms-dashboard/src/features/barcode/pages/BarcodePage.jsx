@@ -51,6 +51,7 @@ const BARCODE_TABS = [
 // ─── Mini MultiSelect for Tax Rules ──────────────────────────────────────────
 function TaxMultiSelect({ taxRules, selectedIds = [], onChange }) {
   const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
   const ref = useRef(null);
 
   useEffect(() => {
@@ -62,6 +63,9 @@ function TaxMultiSelect({ taxRules, selectedIds = [], onChange }) {
   }, []);
 
   const selectedRules = (taxRules || []).filter((t) => selectedIds.includes(t.id));
+  const visibleRules = (taxRules || []).filter((t) =>
+    String(t.name || "").toLowerCase().includes(query.trim().toLowerCase())
+  );
   const label =
     selectedRules.length === 0
       ? "Select tax rules"
@@ -71,7 +75,10 @@ function TaxMultiSelect({ taxRules, selectedIds = [], onChange }) {
     <div ref={ref} className="relative">
       <button
         type="button"
-        onClick={() => setOpen((o) => !o)}
+        onClick={() => {
+          setQuery("");
+          setOpen((o) => !o);
+        }}
         className="w-full flex items-center justify-between border border-slate-200 rounded-md px-3 py-2 text-xs text-left bg-white hover:border-slate-300 transition-colors"
       >
         <span className={selectedRules.length === 0 ? "text-slate-400" : "text-slate-800 truncate"}>
@@ -81,10 +88,22 @@ function TaxMultiSelect({ taxRules, selectedIds = [], onChange }) {
       </button>
       {open && (
         <div className="absolute z-50 mt-1 w-full bg-white border border-slate-200 rounded-md shadow-lg max-h-48 overflow-y-auto">
+          <div className="p-2 border-b border-slate-100 sticky top-0 bg-white">
+            <input
+              autoFocus
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search tax rules..."
+              className="w-full border border-slate-200 rounded-md px-2.5 py-1.5 text-xs bg-white"
+            />
+          </div>
           {(!taxRules || taxRules.length === 0) && (
             <p className="text-xs text-slate-400 px-3 py-2">No tax rules available</p>
           )}
-          {(taxRules || []).map((t) => {
+          {taxRules?.length > 0 && visibleRules.length === 0 && (
+            <p className="text-xs text-slate-400 px-3 py-2">No matches</p>
+          )}
+          {visibleRules.map((t) => {
             const checked = selectedIds.includes(t.id);
             return (
               <label
@@ -619,19 +638,16 @@ export function BarcodePage() {
               <label className="block text-xs font-semibold text-slate-700">
                 Target Product <span className="text-red-500">*</span>
               </label>
-              <select
+              <Select
                 value={selectedProductId}
-                onChange={(e) => setSelectedProductId(e.target.value)}
+                onChange={setSelectedProductId}
                 disabled={isProductsLoading}
-                className="w-full border border-slate-200 rounded-md px-3 py-2 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-slate-400 font-medium"
-              >
-                {products.length === 0 && <option value="">No products available</option>}
-                {products.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name} — {p.variants?.length || 0} existing items
-                  </option>
-                ))}
-              </select>
+                placeholder={products.length === 0 ? "No products available" : "Select a product"}
+                options={products.map((p) => ({
+                  value: String(p.id),
+                  label: `${p.name} — ${p.variants?.length || 0} existing items`,
+                }))}
+              />
 
               {/* Product Info Card Preview */}
               {selectedProduct && (
@@ -839,14 +855,15 @@ export function BarcodePage() {
 
                   <div>
                     <label className="block text-slate-600 font-medium mb-1">Status</label>
-                    <select
+                    <Select
                       value={defaultStatus}
-                      onChange={(e) => handleDefaultStatusChange(e.target.value)}
-                      className="w-full border border-slate-200 rounded-md px-2.5 py-2 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-slate-400"
-                    >
-                      <option value="active">Active</option>
-                      <option value="inactive">Inactive</option>
-                    </select>
+                      onChange={handleDefaultStatusChange}
+                      options={[
+                        { value: "active", label: "Active" },
+                        { value: "inactive", label: "Inactive" },
+                      ]}
+                      className="text-xs"
+                    />
                   </div>
                 </div>
               </div>
@@ -913,16 +930,13 @@ export function BarcodePage() {
                         return (
                           <div key={attr.id} className="space-y-1">
                             <label className="block text-slate-600 font-medium">{label}</label>
-                            <select
+                            <Select
                               value={val}
-                              onChange={(e) => handleDefaultAttributeChange(attr.id, e.target.value)}
-                              className="w-full border border-slate-200 rounded-md px-2.5 py-1.5 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-slate-400"
-                            >
-                              <option value="">Select option</option>
-                              {attr.options.map((opt) => (
-                                <option key={opt} value={opt}>{opt}</option>
-                              ))}
-                            </select>
+                              onChange={(next) => handleDefaultAttributeChange(attr.id, next)}
+                              placeholder="Select option"
+                              options={attr.options.map((opt) => ({ value: opt, label: opt }))}
+                              className="text-xs"
+                            />
                           </div>
                         );
                       }
@@ -1175,16 +1189,13 @@ export function BarcodePage() {
                           if (attr.field_type === "select" && attr.options?.length > 0) {
                             return (
                               <td key={attr.id} className={cellClass}>
-                                <select
+                                <Select
                                   value={val}
-                                  onChange={(e) => handleRowAttributeChange(idx, attr.id, e.target.value)}
-                                  className="w-full border border-slate-200 rounded px-1.5 py-1 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-slate-400"
-                                >
-                                  <option value="">—</option>
-                                  {attr.options.map((opt) => (
-                                    <option key={opt} value={opt}>{opt}</option>
-                                  ))}
-                                </select>
+                                  onChange={(next) => handleRowAttributeChange(idx, attr.id, next)}
+                                  placeholder="—"
+                                  options={attr.options.map((opt) => ({ value: opt, label: opt }))}
+                                  className="text-xs py-1"
+                                />
                               </td>
                             );
                           }
@@ -1192,15 +1203,16 @@ export function BarcodePage() {
                           if (attr.field_type === "boolean") {
                             return (
                               <td key={attr.id} className={cellClass}>
-                                <select
+                                <Select
                                   value={val}
-                                  onChange={(e) => handleRowAttributeChange(idx, attr.id, e.target.value)}
-                                  className="w-full border border-slate-200 rounded px-1.5 py-1 text-xs bg-white focus:outline-none focus:ring-1 focus:ring-slate-400"
-                                >
-                                  <option value="">—</option>
-                                  <option value="Yes">Yes</option>
-                                  <option value="No">No</option>
-                                </select>
+                                  onChange={(next) => handleRowAttributeChange(idx, attr.id, next)}
+                                  placeholder="—"
+                                  options={[
+                                    { value: "Yes", label: "Yes" },
+                                    { value: "No", label: "No" },
+                                  ]}
+                                  className="text-xs py-1"
+                                />
                               </td>
                             );
                           }
@@ -1249,18 +1261,19 @@ export function BarcodePage() {
 
                         {/* Status */}
                         <td className="px-3 py-2.5">
-                          <select
+                          <Select
                             value={row.status}
-                            onChange={(e) => handleRowChange(idx, "status", e.target.value)}
-                            className={`text-[11px] font-semibold rounded px-1.5 py-1 border ${
+                            onChange={(next) => handleRowChange(idx, "status", next)}
+                            options={[
+                              { value: "active", label: "Active" },
+                              { value: "inactive", label: "Inactive" },
+                            ]}
+                            className={`text-[11px] font-semibold py-1 ${
                               row.status === "active"
                                 ? "bg-emerald-50 text-emerald-700 border-emerald-200"
                                 : "bg-slate-100 text-slate-600 border-slate-200"
                             }`}
-                          >
-                            <option value="active">Active</option>
-                            <option value="inactive">Inactive</option>
-                          </select>
+                          />
                         </td>
 
                         {/* Action: Delete */}

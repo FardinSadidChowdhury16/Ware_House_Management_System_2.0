@@ -9,6 +9,7 @@ import { useWarehouseFilter } from "../../app/context/WarehouseFilterContext.jsx
 export function WarehouseFilterBar({ className = "" }) {
   const { myWarehouses, selectedWarehouseId, selectWarehouse, isLoadingWarehouses } = useWarehouseFilter();
   const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
   const containerRef = useRef(null);
 
   // Close dropdown on click outside
@@ -25,6 +26,10 @@ export function WarehouseFilterBar({ className = "" }) {
 
   const selected = myWarehouses.find((w) => w.id === selectedWarehouseId) ?? null;
   const label = selected ? selected.name : "All Warehouses";
+  const needle = query.trim().toLowerCase();
+  const visibleWarehouses = myWarehouses.filter((w) =>
+    !needle || w.name.toLowerCase().includes(needle) || String(w.code || "").toLowerCase().includes(needle)
+  );
 
   if (isLoadingWarehouses) {
     return (
@@ -49,7 +54,10 @@ export function WarehouseFilterBar({ className = "" }) {
     <div ref={containerRef} className={`relative ${className}`}>
       <button
         type="button"
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => {
+          setQuery("");
+          setOpen((v) => !v);
+        }}
         className="flex items-center gap-2 px-3 py-1.5 bg-white dark:bg-slate-900 border border-amber-500 rounded-lg text-xs font-medium text-slate-800 dark:text-slate-100 shadow-sm hover:border-amber-600 hover:bg-amber-50/40 dark:hover:bg-amber-950/30 focus:outline-none focus:ring-2 focus:ring-amber-500/20 transition-all cursor-pointer"
       >
         <Building2 size={13} className="text-amber-500 shrink-0" />
@@ -61,7 +69,16 @@ export function WarehouseFilterBar({ className = "" }) {
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full mt-1 z-50 w-56 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-lg overflow-hidden py-1">
+        <div className="absolute right-0 top-full mt-1 z-50 w-64 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-lg overflow-hidden py-1">
+          <div className="px-2 pt-1 pb-2">
+            <input
+              autoFocus
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search warehouses..."
+              className="w-full border border-slate-200 dark:border-slate-700 rounded-md px-2.5 py-1.5 text-xs bg-white dark:bg-slate-950"
+            />
+          </div>
           {/* All warehouses */}
           <button
             type="button"
@@ -75,11 +92,14 @@ export function WarehouseFilterBar({ className = "" }) {
             All Warehouses
           </button>
 
-          {myWarehouses.length > 0 && (
+          {visibleWarehouses.length > 0 && (
             <div className="border-t border-slate-100 dark:border-slate-800 my-1" />
           )}
+          {visibleWarehouses.length === 0 && (
+            <p className="px-3.5 py-2 text-xs text-slate-400">No matches</p>
+          )}
 
-          {myWarehouses.map((w) => (
+          {visibleWarehouses.map((w) => (
             <button
               key={w.id}
               type="button"

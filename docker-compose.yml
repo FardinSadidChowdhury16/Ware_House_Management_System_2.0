@@ -1,0 +1,62 @@
+services:
+  db:
+    image: postgres:16
+    env_file:
+      - ./ware_house_management_system/.env
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-wms_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-wms_password}
+      POSTGRES_DB: ${POSTGRES_DB:-wms_db}
+    ports:
+      # Host 5432 is often already taken; the API reaches Postgres on the Docker network.
+      - "5437:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-wms_user} -d ${POSTGRES_DB:-wms_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  api:
+    build:
+      context: ./ware_house_management_system
+      dockerfile: Dockerfile
+    env_file:
+      - ./ware_house_management_system/.env
+    environment:
+      POSTGRES_SERVER: db
+      # Bind-mounted source on Docker does not always deliver inotify events.
+      WATCHFILES_FORCE_POLLING: "true"
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./ware_house_management_system:/app
+    depends_on:
+      db:
+        condition: service_healthy
+    command: sh /app/docker-entrypoint.sh
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ./wms-dashboard
+      dockerfile: Dockerfile
+    environment:
+      VITE_API_BASE_URL: http://localhost:8000/api/v1
+      VITE_USE_MOCK_API: "false"
+      CHOKIDAR_USEPOLLING: "true"
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./wms-dashboard:/app
+      - web_node_modules:/app/node_modules
+    command: npm run dev -- --host 0.0.0.0 --port 5173
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  web_node_modules:

@@ -85,9 +85,16 @@ class ServicesController:
         search: str = None,
         status: str = None,
         warehouse_id: Optional[Union[int, List[int]]] = None,
+        date_from=None,
+        date_to=None,
+        product_id=None,
+        barcode=None,
+        name=None,
     ) -> PaginatedServiceTicketsResponse:
         service = ServicesService(db)
-        return service.list_service_tickets(page, page_size, search, status, warehouse_id)
+        return service.list_service_tickets(
+            page, page_size, search, status, warehouse_id, date_from, date_to, product_id, barcode, name
+        )
 
     @staticmethod
     def lookup_barcode(barcode: str, db: Session) -> BarcodeLookupResponse:

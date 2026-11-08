@@ -90,8 +90,15 @@ class ServicesService:
         search: str = None,
         status: str = None,
         warehouse_id: Optional[Union[int, List[int]]] = None,
+        date_from=None,
+        date_to=None,
+        product_id=None,
+        barcode=None,
+        name=None,
     ) -> PaginatedServiceTicketsResponse:
-        return self.repo.get_tickets_paginated(page, page_size, search, status, warehouse_id)
+        return self.repo.get_tickets_paginated(
+            page, page_size, search, status, warehouse_id, date_from, date_to, product_id, barcode, name
+        )
 
     def lookup_barcode(self, barcode: str) -> BarcodeLookupResponse:
         return self.repo.barcode_lookup(barcode)

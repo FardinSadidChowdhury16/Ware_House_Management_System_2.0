@@ -511,17 +511,15 @@ function CreateTicketModal({ isOpen, onClose, onCreated, defaultWarehouseId }) {
               <label className="block text-xs font-medium text-slate-700 mb-1">
                 Servicing Warehouse <span className="text-rose-500">*</span>
               </label>
-              <select
+              <Select
                 value={formData.warehouse_id}
-                onChange={(e) => setFormData({ ...formData, warehouse_id: e.target.value })}
-                className="w-full px-3 py-1.5 text-sm border border-slate-300 rounded-md focus:outline-none focus:ring-1 focus:ring-slate-900 bg-white"
-              >
-                {warehouses.map((w) => (
-                  <option key={w.id} value={w.id}>
-                    {w.name} {w.code ? `(${w.code})` : ""}
-                  </option>
-                ))}
-              </select>
+                onChange={(v) => setFormData({ ...formData, warehouse_id: v })}
+                placeholder="Select warehouse"
+                options={warehouses.map((w) => ({
+                  value: String(w.id),
+                  label: `${w.name}${w.code ? ` (${w.code})` : ""}`,
+                }))}
+              />
               {errors.warehouse_id && (
                 <p className="text-[11px] text-rose-600 mt-1">{errors.warehouse_id}</p>
               )}
@@ -1630,17 +1628,18 @@ export function ReturnsPage() {
             <span className="text-xs font-medium text-slate-500 whitespace-nowrap">
               Status:
             </span>
-            <select
+            <Select
               value={statusFilter}
-              onChange={(e) => handleStatusFilter(e.target.value)}
-              className="border border-slate-200 rounded-md px-2.5 py-1.5 text-xs text-slate-700 bg-white font-medium focus:outline-none focus:ring-1 focus:ring-slate-900"
-            >
-              <option value="All">All Statuses ({stats.total ?? 0})</option>
-              <option value="idle">Idle / Pending ({stats.idle ?? 0})</option>
-              <option value="on_repairing">In Repair ({stats.on_repairing ?? 0})</option>
-              <option value="work_finish">Work Finished ({stats.work_finish ?? 0})</option>
-              <option value="delivered">Delivered ({stats.delivered ?? 0})</option>
-            </select>
+              onChange={handleStatusFilter}
+              options={[
+                { value: "All", label: `All Statuses (${stats.total ?? 0})` },
+                { value: "idle", label: `Idle / Pending (${stats.idle ?? 0})` },
+                { value: "on_repairing", label: `In Repair (${stats.on_repairing ?? 0})` },
+                { value: "work_finish", label: `Work Finished (${stats.work_finish ?? 0})` },
+                { value: "delivered", label: `Delivered (${stats.delivered ?? 0})` },
+              ]}
+              className="w-auto min-w-48 text-xs py-1.5"
+            />
           </div>
         </div>
       </Toolbar>

@@ -44,6 +44,12 @@ export const returnsApi = {
     if (params.page_size) query.append("page_size", params.page_size);
     if (params.search) query.append("search", params.search);
     if (params.status && params.status !== "All") query.append("status", params.status);
+    if (params.warehouse_id) query.append("warehouse_id", params.warehouse_id);
+    if (params.date_from) query.append("date_from", params.date_from);
+    if (params.date_to) query.append("date_to", params.date_to);
+    if (params.product_id) query.append("product_id", params.product_id);
+    if (params.barcode) query.append("barcode", params.barcode);
+    if (params.name) query.append("name", params.name);
 
     const queryString = query.toString();
     const url = `/services/tickets${queryString ? `?${queryString}` : ""}`;

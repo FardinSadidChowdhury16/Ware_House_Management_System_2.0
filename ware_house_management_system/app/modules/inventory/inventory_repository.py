@@ -112,6 +112,8 @@ class InventoryRepository:
         date_from=None,
         date_to=None,
         search=None,
+        barcode=None,
+        name=None,
         allowed_warehouse_ids=None,
     ):
         """Get paginated stock movements with joined product/warehouse/supplier/customer names."""
@@ -234,6 +236,39 @@ class InventoryRepository:
         if date_to:
             from datetime import timedelta
             query = query.filter(StockMovement.created_at < date_to + timedelta(days=1))
+        if barcode and str(barcode).strip():
+            from app.models.inventory import SerializedItem
+            pattern = f"%{str(barcode).strip()}%"
+            query = query.filter(
+                or_(
+                    self.db.query(ProductVariant.id).filter(
+                        ProductVariant.id == StockMovement.variant_id,
+                        or_(ProductVariant.barcode.ilike(pattern), ProductVariant.sku.ilike(pattern)),
+                    ).exists(),
+                    self.db.query(SerializedItem.id).filter(
+                        SerializedItem.id == StockMovement.product_item_id,
+                        or_(SerializedItem.serial_number.ilike(pattern), SerializedItem.barcode.ilike(pattern)),
+                    ).exists(),
+                )
+            )
+        if name and str(name).strip():
+            pattern = f"%{str(name).strip()}%"
+            query = query.filter(
+                or_(
+                    self.db.query(Product.id).filter(
+                        Product.id == StockMovement.product_id,
+                        Product.name.ilike(pattern),
+                    ).exists(),
+                    self.db.query(ProductVariant.id).filter(
+                        ProductVariant.id == StockMovement.variant_id,
+                        ProductVariant.name.ilike(pattern),
+                    ).exists(),
+                    self.db.query(Customer.id).filter(
+                        Customer.id == StockMovement.customer_id,
+                        Customer.name.ilike(pattern),
+                    ).exists(),
+                )
+            )
         if search and search.strip():
             from app.models.access_control import User
 

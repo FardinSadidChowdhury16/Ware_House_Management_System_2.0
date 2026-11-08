@@ -201,6 +201,8 @@ def list_movements(
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
     search: Optional[str] = None,
+    barcode: Optional[str] = None,
+    name: Optional[str] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -218,6 +220,8 @@ def list_movements(
         date_from,
         date_to,
         search,
+        barcode=barcode,
+        name=name,
         allowed_warehouse_ids=target_wh_ids,
     )
 
@@ -228,6 +232,9 @@ def get_sales_report(
     date_from: Optional[str] = None,
     date_to: Optional[str] = None,
     search: Optional[str] = None,
+    product_id: Optional[int] = None,
+    barcode: Optional[str] = None,
+    name: Optional[str] = None,
     page: int = 1,
     page_size: int = 15,
     db: Session = Depends(get_db),
@@ -261,6 +268,9 @@ def get_sales_report(
         date_from=date_from,
         date_to=date_to,
         search=search,
+        product_id=product_id,
+        barcode=barcode,
+        name=name,
         page=page,
         page_size=page_size,
         allowed_warehouse_ids=target_wh_ids,

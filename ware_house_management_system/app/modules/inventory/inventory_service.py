@@ -998,6 +998,13 @@ class InventoryService:
             v = var_map.get(si.variant_id)
             v_name = v.name if v else "Default Variant"
             g["variant_counts"][v_name] = g["variant_counts"].get(v_name, 0) + 1
+            codes = g.setdefault("barcodes", [])
+            names = g.setdefault("item_names", [])
+            for value in (si.barcode, si.serial_number, getattr(v, "barcode", None), getattr(v, "sku", None)):
+                if value and value not in codes:
+                    codes.append(value)
+            if v_name and v_name not in names:
+                names.append(v_name)
 
             g["serialized_items"].append({
                 "id": si.id,
@@ -1056,6 +1063,13 @@ class InventoryService:
             v = var_map.get(bs.variant_id)
             v_name = v.name if v else "Standard"
             g["variant_counts"][v_name] = g["variant_counts"].get(v_name, 0) + qty
+            codes = g.setdefault("barcodes", [])
+            names = g.setdefault("item_names", [])
+            for value in (getattr(v, "barcode", None), getattr(v, "sku", None)):
+                if value and value not in codes:
+                    codes.append(value)
+            if v_name and v_name not in names:
+                names.append(v_name)
 
         # Ensure total_received_qty is at least in_stock_qty + stock_out_qty + servicing_qty + transfer_out_qty
         for key, g in grouped.items():
@@ -1171,6 +1185,9 @@ class InventoryService:
         date_from: Optional[str] = None,
         date_to: Optional[str] = None,
         search: Optional[str] = None,
+        product_id: Optional[int] = None,
+        barcode: Optional[str] = None,
+        name: Optional[str] = None,
         page: int = 1,
         page_size: int = 15,
         allowed_warehouse_ids: Optional[List[int]] = None,
@@ -1224,6 +1241,43 @@ class InventoryService:
         if category_id:
             query = query.join(Product, Product.id == StockMovement.product_id).filter(
                 Product.category_id == category_id
+            )
+
+        if product_id:
+            query = query.filter(StockMovement.product_id == product_id)
+
+        if barcode and str(barcode).strip():
+            pat = f"%{str(barcode).strip()}%"
+            query = query.filter(
+                or_(
+                    self.db.query(ProductVariant.id).filter(
+                        ProductVariant.id == StockMovement.variant_id,
+                        or_(ProductVariant.barcode.ilike(pat), ProductVariant.sku.ilike(pat)),
+                    ).exists(),
+                    self.db.query(SerializedItem.id).filter(
+                        SerializedItem.id == StockMovement.product_item_id,
+                        or_(SerializedItem.serial_number.ilike(pat), SerializedItem.barcode.ilike(pat)),
+                    ).exists(),
+                )
+            )
+
+        if name and str(name).strip():
+            pat = f"%{str(name).strip()}%"
+            query = query.filter(
+                or_(
+                    self.db.query(Product.id).filter(
+                        Product.id == StockMovement.product_id,
+                        Product.name.ilike(pat),
+                    ).exists(),
+                    self.db.query(ProductVariant.id).filter(
+                        ProductVariant.id == StockMovement.variant_id,
+                        ProductVariant.name.ilike(pat),
+                    ).exists(),
+                    self.db.query(Customer.id).filter(
+                        Customer.id == StockMovement.customer_id,
+                        Customer.name.ilike(pat),
+                    ).exists(),
+                )
             )
 
         # Search filtering

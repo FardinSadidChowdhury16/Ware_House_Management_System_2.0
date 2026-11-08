@@ -35,6 +35,7 @@ import {
   Td,
   useToast,
   MiniBarcode,
+  Select,
 } from "../../../components/ui/index.js";
 import { BarcodeRenderer } from "../../../components/ui/BarcodeRenderer.jsx";
 import { useWarehouses } from "../../warehouses/hooks/useWarehouses.js";
@@ -662,19 +663,19 @@ export function ViewBarcodeTab() {
               <Building2 size={13} className="text-slate-400" />
               <span>Select Warehouse</span>
             </label>
-            <select
+            <Select
               value={selectedWarehouseId}
-              onChange={(e) => setSelectedWarehouseId(e.target.value)}
+              onChange={setSelectedWarehouseId}
               disabled={isWarehousesLoading}
-              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs bg-white text-slate-800 font-medium focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-slate-900 transition-all cursor-pointer"
-            >
-              <option value="">🏢 All Warehouses ({warehouses.length})</option>
-              {warehouses.map((w) => (
-                <option key={w.id} value={String(w.id)}>
-                  {w.code ? `[${w.code}] ` : ""}{w.name}
-                </option>
-              ))}
-            </select>
+              options={[
+                { value: "", label: `All Warehouses (${warehouses.length})` },
+                ...warehouses.map((w) => ({
+                  value: String(w.id),
+                  label: `${w.code ? `[${w.code}] ` : ""}${w.name}`,
+                })),
+              ]}
+              className="text-xs"
+            />
           </div>
 
           {/* 2. Product Selector */}
@@ -683,19 +684,19 @@ export function ViewBarcodeTab() {
               <Package size={13} className="text-slate-400" />
               <span>Select Product</span>
             </label>
-            <select
+            <Select
               value={selectedProductId}
-              onChange={(e) => setSelectedProductId(e.target.value)}
+              onChange={setSelectedProductId}
               disabled={isProductsLoading}
-              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs bg-white text-slate-800 font-medium focus:outline-none focus:ring-2 focus:ring-slate-900 focus:border-slate-900 transition-all cursor-pointer"
-            >
-              <option value="">📦 All Products ({products.length})</option>
-              {products.map((p) => (
-                <option key={p.id} value={String(p.id)}>
-                  {p.sku ? `[${p.sku}] ` : ""}{p.name}
-                </option>
-              ))}
-            </select>
+              options={[
+                { value: "", label: `All Products (${products.length})` },
+                ...products.map((p) => ({
+                  value: String(p.id),
+                  label: `${p.sku ? `[${p.sku}] ` : ""}${p.name}`,
+                })),
+              ]}
+              className="text-xs"
+            />
           </div>
 
           {/* 3. Search Box */}
@@ -722,19 +723,20 @@ export function ViewBarcodeTab() {
               <Filter size={13} className="text-slate-400" />
               <span>Item Status</span>
             </label>
-            <select
+            <Select
               value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-xs bg-white text-slate-800 font-medium focus:outline-none focus:ring-2 focus:ring-slate-900 transition-all cursor-pointer"
-            >
-              <option value="all">All Statuses</option>
-              <option value="in_stock">In Stock / Available</option>
-              <option value="active">Active</option>
-              <option value="under_service">Under Service / Repair</option>
-              <option value="in_transit">In Transit</option>
-              <option value="sold">Sold</option>
-              <option value="printed">Printed</option>
-            </select>
+              onChange={setStatusFilter}
+              options={[
+                { value: "all", label: "All Statuses" },
+                { value: "in_stock", label: "In Stock / Available" },
+                { value: "active", label: "Active" },
+                { value: "under_service", label: "Under Service / Repair" },
+                { value: "in_transit", label: "In Transit" },
+                { value: "sold", label: "Sold" },
+                { value: "printed", label: "Printed" },
+              ]}
+              className="text-xs"
+            />
           </div>
         </div>
 
@@ -804,16 +806,12 @@ export function ViewBarcodeTab() {
 
             <div className="flex items-center gap-1.5 text-xs text-slate-500">
               <span>Rows:</span>
-              <select
-                value={tablePageSize}
-                onChange={(e) => setTablePageSize(Number(e.target.value))}
-                className="border border-slate-200 rounded px-2 py-1 text-xs bg-white text-slate-700 font-medium"
-              >
-                <option value={5}>5</option>
-                <option value={10}>10</option>
-                <option value={25}>25</option>
-                <option value={50}>50</option>
-              </select>
+              <Select
+                value={String(tablePageSize)}
+                onChange={(v) => setTablePageSize(Number(v))}
+                options={["5", "10", "25", "50"]}
+                className="w-auto min-w-16 text-xs py-1"
+              />
             </div>
           </div>
         </div>
@@ -1101,48 +1099,51 @@ export function ViewBarcodeTab() {
                 {/* Sticker Size */}
                 <div className="flex items-center gap-1.5">
                   <span className="font-semibold text-slate-700">Label Size:</span>
-                  <select
+                  <Select
                     value={labelSize}
-                    onChange={(e) => setLabelSize(e.target.value)}
-                    className="border border-slate-200 rounded px-2 py-1 bg-white text-slate-800 font-medium text-xs"
-                  >
-                    <option value="standard">Standard (50 × 28mm)</option>
-                    <option value="compact">Compact (38 × 24mm)</option>
-                    <option value="large">Large / A4 (65 × 38mm)</option>
-                  </select>
+                    onChange={setLabelSize}
+                    options={[
+                      { value: "standard", label: "Standard (50 × 28mm)" },
+                      { value: "compact", label: "Compact (38 × 24mm)" },
+                      { value: "large", label: "Large / A4 (65 × 38mm)" },
+                    ]}
+                    className="w-auto min-w-44 text-xs py-1"
+                  />
                 </div>
 
                 {/* Copies per item */}
                 <div className="flex items-center gap-1.5">
                   <span className="font-semibold text-slate-700">Copies:</span>
-                  <select
-                    value={copiesPerItem}
-                    onChange={(e) => setCopiesPerItem(Number(e.target.value))}
-                    className="border border-slate-200 rounded px-2 py-1 bg-white text-slate-800 font-medium text-xs"
-                  >
-                    <option value={1}>1 copy</option>
-                    <option value={2}>2 copies</option>
-                    <option value={3}>3 copies</option>
-                    <option value={5}>5 copies</option>
-                  </select>
+                  <Select
+                    value={String(copiesPerItem)}
+                    onChange={(v) => setCopiesPerItem(Number(v))}
+                    options={[
+                      { value: "1", label: "1 copy" },
+                      { value: "2", label: "2 copies" },
+                      { value: "3", label: "3 copies" },
+                      { value: "5", label: "5 copies" },
+                    ]}
+                    className="w-auto min-w-28 text-xs py-1"
+                  />
                 </div>
 
                 {/* Per Page Barcode Count */}
                 <div className="flex items-center gap-1.5">
                   <span className="font-semibold text-slate-700">Display per Page:</span>
-                  <select
-                    value={barcodesPerPage}
-                    onChange={(e) => {
-                      setBarcodesPerPage(Number(e.target.value));
+                  <Select
+                    value={String(barcodesPerPage)}
+                    onChange={(v) => {
+                      setBarcodesPerPage(Number(v));
                       setBarcodeDisplayPage(1);
                     }}
-                    className="border border-slate-200 rounded px-2 py-1 bg-white text-slate-800 font-medium text-xs"
-                  >
-                    <option value={6}>6 barcodes</option>
-                    <option value={12}>12 barcodes</option>
-                    <option value={24}>24 barcodes</option>
-                    <option value={48}>48 barcodes</option>
-                  </select>
+                    options={[
+                      { value: "6", label: "6 barcodes" },
+                      { value: "12", label: "12 barcodes" },
+                      { value: "24", label: "24 barcodes" },
+                      { value: "48", label: "48 barcodes" },
+                    ]}
+                    className="w-auto min-w-32 text-xs py-1"
+                  />
                 </div>
               </div>
 

@@ -42,6 +42,7 @@ import {
   Toolbar,
   EmptyTable,
   Pagination,
+  Select,
   DateRangeFilter,
   useToast,
   useConfirm,
@@ -63,6 +64,7 @@ import { ItemDetailsModal } from "../components/ItemDetailsModal.jsx";
 // ─── Mini MultiSelect for Tax Rules ──────────────────────────────────────────
 function TaxMultiSelect({ taxRules, selectedIds, onChange }) {
   const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
   const ref = useRef(null);
 
   useEffect(() => {
@@ -74,6 +76,9 @@ function TaxMultiSelect({ taxRules, selectedIds, onChange }) {
   }, []);
 
   const selectedRules = taxRules.filter((t) => selectedIds.includes(t.id));
+  const visibleRules = taxRules.filter((t) =>
+    t.name.toLowerCase().includes(query.trim().toLowerCase())
+  );
   const label =
     selectedRules.length === 0
       ? "Select tax rules"
@@ -93,10 +98,22 @@ function TaxMultiSelect({ taxRules, selectedIds, onChange }) {
       </button>
       {open && (
         <div className="absolute z-50 mt-1 w-full bg-white border border-slate-200 rounded-md shadow-lg max-h-48 overflow-y-auto">
+          <div className="p-2 border-b border-slate-100 sticky top-0 bg-white">
+            <input
+              autoFocus
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search tax rules..."
+              className="w-full border border-slate-200 rounded-md px-2.5 py-1.5 text-sm bg-white"
+            />
+          </div>
           {taxRules.length === 0 && (
             <p className="text-xs text-slate-400 px-3 py-2">No tax rules available</p>
           )}
-          {taxRules.map((t) => {
+          {taxRules.length > 0 && visibleRules.length === 0 && (
+            <p className="text-xs text-slate-400 px-3 py-2">No matches</p>
+          )}
+          {visibleRules.map((t) => {
             const checked = selectedIds.includes(t.id);
             return (
               <label
@@ -339,6 +356,7 @@ function CategorySelect({ productTypes, value, onChange, onAddNew, onEditType, o
   const { isAdmin, user } = useAuth();
   const canWrite = isAdmin || hasPermission(user, "product_write");
   const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
   const ref = useRef(null);
 
   useEffect(() => {
@@ -350,12 +368,18 @@ function CategorySelect({ productTypes, value, onChange, onAddNew, onEditType, o
   }, []);
 
   const selected = productTypes.find((t) => t.id === value);
+  const visibleTypes = productTypes.filter((t) =>
+    t.name.toLowerCase().includes(query.trim().toLowerCase())
+  );
 
   return (
     <div ref={ref} className="relative">
       <button
         type="button"
-        onClick={() => setOpen((o) => !o)}
+        onClick={() => {
+          setQuery("");
+          setOpen((o) => !o);
+        }}
         className="w-full flex items-center justify-between border border-slate-200 rounded-md px-3 py-2 text-sm text-left bg-white hover:border-slate-300 transition-colors"
       >
         <span className={selected ? "text-slate-800" : "text-slate-400"}>
@@ -364,8 +388,20 @@ function CategorySelect({ productTypes, value, onChange, onAddNew, onEditType, o
         <ChevronDown size={14} className="text-slate-400 shrink-0 ml-2" />
       </button>
       {open && (
-        <div className="absolute z-50 mt-1 w-full bg-white border border-slate-200 rounded-md shadow-lg max-h-52 overflow-y-auto">
-          {productTypes.map((t) => (
+        <div className="absolute z-50 mt-1 w-full bg-white border border-slate-200 rounded-md shadow-lg max-h-64 overflow-y-auto">
+          <div className="p-2 border-b border-slate-100 sticky top-0 bg-white">
+            <input
+              autoFocus
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search categories..."
+              className="w-full border border-slate-200 rounded-md px-2.5 py-1.5 text-sm bg-white"
+            />
+          </div>
+          {visibleTypes.length === 0 && (
+            <p className="px-3 py-2 text-sm text-slate-400">No matches</p>
+          )}
+          {visibleTypes.map((t) => (
             <div
               key={t.id}
               className={`flex items-center justify-between gap-2 px-3 py-2 text-sm hover:bg-slate-50 ${
@@ -471,18 +507,12 @@ function AttributeFields({ attributes, values, onChange }) {
                   <label className="block text-xs font-medium text-slate-600 mb-1.5">
                     {label}
                   </label>
-                  <select
+                  <Select
                     value={val}
-                    onChange={(e) => onChange(attr.id, e.target.value)}
-                    className="w-full border border-slate-200 rounded-md px-3 py-2 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-slate-400"
-                  >
-                    <option value="">Select…</option>
-                    {attr.options.map((opt) => (
-                      <option key={opt} value={opt}>
-                        {opt}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={(next) => onChange(attr.id, next)}
+                    placeholder="Select…"
+                    options={attr.options.map((opt) => ({ value: opt, label: opt }))}
+                  />
                 </div>
               );
             }
@@ -1500,26 +1530,21 @@ export function ProductsPage() {
 
               {/* Stock Status Dropdown Filter */}
               <div className="relative">
-                <select
+                <Select
                   value={variantStockFilter}
-                  onChange={(e) => {
-                    setVariantStockFilter(e.target.value);
+                  onChange={(v) => {
+                    setVariantStockFilter(v);
                     setVariantPage(1);
                   }}
-                  className={`h-[31px] border rounded-md pl-2.5 pr-7 py-1 text-xs font-medium appearance-none cursor-pointer transition-colors focus:outline-none focus:ring-1 focus:ring-slate-400 ${
-                    variantStockFilter !== "all"
-                      ? "border-amber-400 bg-amber-50 text-amber-800"
-                      : "border-slate-200 bg-white text-slate-700 hover:border-slate-300"
-                  }`}
                   title="Filter by Stock Status"
-                >
-                  <option value="all">All Items</option>
-                  <option value="stocked_in">Stocked In</option>
-                  <option value="not_stocked_in">Not Stocked In</option>
-                </select>
-                <ChevronDown
-                  size={12}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
+                  options={[
+                    { value: "all", label: "All Items" },
+                    { value: "stocked_in", label: "Stocked In" },
+                    { value: "not_stocked_in", label: "Not Stocked In" },
+                  ]}
+                  className={`w-auto min-w-36 text-xs py-1 ${
+                    variantStockFilter !== "all" ? "border-amber-400 bg-amber-50 text-amber-800" : ""
+                  }`}
                 />
               </div>
 
@@ -2135,28 +2160,21 @@ export function ProductsPage() {
           placeholder="Search by name or code..."
         />
         <div className="relative">
-          <select
+          <Select
             value={productFilter}
-            onChange={(e) => {
-              setProductFilter(e.target.value);
+            onChange={(v) => {
+              setProductFilter(v);
               setProductPage(1);
             }}
-            className={`h-9 border rounded-md pl-3 pr-8 py-1.5 text-xs font-medium appearance-none cursor-pointer transition-colors focus:outline-none focus:ring-1 focus:ring-slate-400 ${
-              productFilter !== "all"
-                ? "border-primary bg-primary/5 text-primary font-semibold"
-                : "border-slate-200 bg-white text-slate-700 hover:border-slate-300"
-            }`}
             title="Filter products"
-          >
-            <option value="all">All</option>
-            <option value="serialized">Serialized</option>
-            <option value="bulk">Bulk</option>
-            <option value="active">Active</option>
-            <option value="inactive">Inactive</option>
-          </select>
-          <ChevronDown
-            size={13}
-            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none"
+            options={[
+              { value: "all", label: "All" },
+              { value: "serialized", label: "Serialized" },
+              { value: "bulk", label: "Bulk" },
+              { value: "active", label: "Active" },
+              { value: "inactive", label: "Inactive" },
+            ]}
+            className="w-auto min-w-32 text-xs py-1.5"
           />
         </div>
       </Toolbar>
@@ -2529,21 +2547,22 @@ export function ProductsPage() {
                         className="w-full border border-slate-200 rounded px-2.5 py-1.5 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-slate-400"
                       />
                     </div>
-                    <select
+                    <Select
                       value={attr.field_type}
-                      onChange={(e) => {
+                      onChange={(v) => {
                         const updated = [...newCategoryAttributes];
-                        updated[idx] = { ...updated[idx], field_type: e.target.value };
+                        updated[idx] = { ...updated[idx], field_type: v };
                         setNewCategoryAttributes(updated);
                       }}
-                      className="border border-slate-200 rounded px-2 py-1.5 text-sm bg-white focus:outline-none w-28 shrink-0"
-                    >
-                      <option value="text">Text</option>
-                      <option value="number">Number</option>
-                      <option value="boolean">Yes/No</option>
-                      <option value="date">Date</option>
-                      <option value="select">Select</option>
-                    </select>
+                      options={[
+                        { value: "text", label: "Text" },
+                        { value: "number", label: "Number" },
+                        { value: "boolean", label: "Yes/No" },
+                        { value: "date", label: "Date" },
+                        { value: "select", label: "Select" },
+                      ]}
+                      className="w-28 shrink-0 text-sm py-1.5"
+                    />
                     <button
                       type="button"
                       onClick={() =>

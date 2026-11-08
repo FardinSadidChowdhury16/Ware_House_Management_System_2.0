@@ -1,4 +1,5 @@
 import { ChevronLeft, ChevronRight, MoreHorizontal } from "lucide-react";
+import { Select } from "./Select.jsx";
 
 export function Pagination({
   page = 1,
@@ -47,17 +48,12 @@ export function Pagination({
         {onPageSizeChange && (
           <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 mr-1">
             <span>Rows:</span>
-            <select
-              value={pageSize}
-              onChange={(e) => onPageSizeChange(Number(e.target.value))}
-              className="border border-slate-200 dark:border-slate-700 rounded px-2 py-1 text-xs bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-medium focus:outline-none focus:ring-1 focus:ring-slate-400 dark:focus:ring-slate-600 cursor-pointer"
-            >
-              {pageSizeOptions.map((opt) => (
-                <option key={opt} value={opt}>
-                  {opt}
-                </option>
-              ))}
-            </select>
+            <Select
+              value={String(pageSize)}
+              onChange={(v) => onPageSizeChange(Number(v))}
+              options={pageSizeOptions.map((opt) => ({ value: String(opt), label: String(opt) }))}
+              className="w-auto min-w-16 text-xs py-1"
+            />
           </div>
         )}
 

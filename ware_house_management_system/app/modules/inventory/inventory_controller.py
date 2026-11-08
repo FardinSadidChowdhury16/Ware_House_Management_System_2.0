@@ -82,6 +82,8 @@ class InventoryController:
         date_from: Optional[str] = None, 
         date_to: Optional[str] = None,
         search: Optional[str] = None,
+        barcode: Optional[str] = None,
+        name: Optional[str] = None,
         allowed_warehouse_ids: Optional[List[int]] = None,
     ) -> PaginatedMovementsResponse:
         service = InventoryService(db)
@@ -101,6 +103,8 @@ class InventoryController:
             date_from=d_from,
             date_to=d_to,
             search=search,
+            barcode=barcode,
+            name=name,
             allowed_warehouse_ids=allowed_warehouse_ids,
         )
         import math
@@ -154,6 +158,9 @@ class InventoryController:
         date_from: Optional[str] = None,
         date_to: Optional[str] = None,
         search: Optional[str] = None,
+        product_id: Optional[int] = None,
+        barcode: Optional[str] = None,
+        name: Optional[str] = None,
         page: int = 1,
         page_size: int = 15,
         allowed_warehouse_ids: Optional[List[int]] = None,
@@ -165,6 +172,9 @@ class InventoryController:
             date_from=date_from,
             date_to=date_to,
             search=search,
+            product_id=product_id,
+            barcode=barcode,
+            name=name,
             page=page,
             page_size=page_size,
             allowed_warehouse_ids=allowed_warehouse_ids,

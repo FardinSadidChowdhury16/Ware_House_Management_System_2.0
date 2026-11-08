@@ -367,6 +367,51 @@ class ServicesRepository:
         self.db.refresh(ticket)
         return self.format_ticket_dict(ticket)
 
+    def _apply_ticket_identity(self, query, product_id=None, barcode=None, name=None):
+        from sqlalchemy import or_
+
+        if product_id is not None:
+            query = query.filter(ServiceTicket.product_id == product_id)
+        if barcode and str(barcode).strip():
+            pat = f"%{str(barcode).strip()}%"
+            query = query.filter(
+                or_(
+                    ServiceTicket.barcode.ilike(pat),
+                    ServiceTicket.item_name.ilike(pat),
+                )
+            )
+        if name and str(name).strip():
+            pat = f"%{str(name).strip()}%"
+            query = query.filter(
+                or_(
+                    ServiceTicket.product_name.ilike(pat),
+                    ServiceTicket.item_name.ilike(pat),
+                    ServiceTicket.customer_name.ilike(pat),
+                )
+            )
+        return query
+
+    def _apply_ticket_date_range(self, query, date_from=None, date_to=None):
+        if date_from is None and date_to is None:
+            return query
+        from sqlalchemy import and_, or_, cast, Date
+
+        columns = [
+            ServiceTicket.received_date,
+            cast(ServiceTicket.started_at, Date),
+            cast(ServiceTicket.completed_date, Date),
+            cast(ServiceTicket.delivered_date, Date),
+        ]
+        clauses = []
+        for column in columns:
+            parts = []
+            if date_from is not None:
+                parts.append(column >= date_from)
+            if date_to is not None:
+                parts.append(column <= date_to)
+            clauses.append(and_(*parts))
+        return query.filter(or_(*clauses))
+
     def get_tickets_paginated(
         self,
         page: int = 1,
@@ -374,6 +419,11 @@ class ServicesRepository:
         search: Optional[str] = None,
         status: Optional[str] = None,
         warehouse_id: Optional[int] = None,
+        date_from=None,
+        date_to=None,
+        product_id=None,
+        barcode=None,
+        name=None,
     ):
         from sqlalchemy import or_
         from app.models.warehouse import Warehouse
@@ -385,6 +435,8 @@ class ServicesRepository:
                 all_tickets_q = all_tickets_q.filter(ServiceTicket.warehouse_id.in_(warehouse_id))
             else:
                 all_tickets_q = all_tickets_q.filter(ServiceTicket.warehouse_id == warehouse_id)
+        all_tickets_q = self._apply_ticket_date_range(all_tickets_q, date_from, date_to)
+        all_tickets_q = self._apply_ticket_identity(all_tickets_q, product_id, barcode, name)
         all_tickets = all_tickets_q.all()
         stats = {
             "total": len(all_tickets),
@@ -400,6 +452,8 @@ class ServicesRepository:
                 query = query.filter(ServiceTicket.warehouse_id.in_(warehouse_id))
             else:
                 query = query.filter(ServiceTicket.warehouse_id == warehouse_id)
+        query = self._apply_ticket_date_range(query, date_from, date_to)
+        query = self._apply_ticket_identity(query, product_id, barcode, name)
 
         if search and search.strip():
             pat = f"%{search.strip()}%"

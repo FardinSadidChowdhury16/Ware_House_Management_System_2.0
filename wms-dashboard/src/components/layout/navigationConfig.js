@@ -43,6 +43,7 @@ export const SECTION_PATHS = {
   report_movement: "/reports/inventory-movement",
   report_low_stock: "/reports/low-stock",
   report_stock_sell: "/reports/stock-sell",
+  report_servicing: "/reports/servicing",
   settings: "/settings",
 };
 
@@ -85,6 +86,7 @@ export const NAV = [
       { id: "report_movement", label: "Inventory Movement", icon: ArrowLeftRight, path: SECTION_PATHS.report_movement, permission: "report_read" },
       { id: "report_low_stock", label: "Low Stock Report", icon: AlertTriangle, path: SECTION_PATHS.report_low_stock, permission: "report_read" },
       { id: "report_stock_sell", label: "Stock Sell Report", icon: TrendingDown, path: SECTION_PATHS.report_stock_sell, permission: "report_read" },
+      { id: "report_servicing", label: "Servicing Report", icon: Wrench, path: SECTION_PATHS.report_servicing, permission: "report_read" },
     ],
   },
   {
@@ -167,6 +169,7 @@ export const LABELS = {
   report_movement: "Inventory Movement Report",
   report_low_stock: "Low Stock Report",
   report_stock_sell: "Stock Sell Report",
+  report_servicing: "Servicing Report",
   settings: "Tax Rules",
 };
 
@@ -190,5 +193,6 @@ export const DESCRIPTIONS = {
   report_movement: "Complete audit trail of all warehouse stock in/out and transfer movements.",
   report_low_stock: "Critical shortage items below minimum required safety stock levels.",
   report_stock_sell: "Customer sales dispatches, delivery references, and sold quantities.",
+  report_servicing: "Service tickets received, in repair, finished, and delivered for a date range.",
   settings: "Create and manage tax rules to assign to products.",
 };

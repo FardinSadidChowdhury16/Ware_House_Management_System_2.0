@@ -55,6 +55,7 @@ export function AppRouter() {
           <Route path="reports/inventory-movement" element={<PermissionRoute permission="report_read"><ReportsPage initialReport="movement_report" /></PermissionRoute>} />
           <Route path="reports/low-stock" element={<PermissionRoute permission="report_read"><ReportsPage initialReport="low_stock_report" /></PermissionRoute>} />
           <Route path="reports/stock-sell" element={<PermissionRoute permission="report_read"><ReportsPage initialReport="stock_sell_report" /></PermissionRoute>} />
+          <Route path="reports/servicing" element={<PermissionRoute permission="report_read"><ReportsPage initialReport="servicing_report" /></PermissionRoute>} />
           <Route path="settings" element={<PermissionRoute permission="tax_read"><SettingsPage /></PermissionRoute>} />
         </Route>
 

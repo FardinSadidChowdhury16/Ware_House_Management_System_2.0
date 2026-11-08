@@ -1,6 +1,5 @@
 import { useAuth } from "../../auth/hooks/useAuth.js";
-
-const selectCls = "border border-slate-300 rounded-md px-3 py-2 text-sm";
+import { Select } from "../../../components/ui/Select.jsx";
 
 export function UsersToolbar({ search, statusFilter, roleFilter, roles, onSearchChange, onStatusChange, onRoleChange, onAdd, extraAction }) {
   const { isAdmin } = useAuth();
@@ -13,21 +12,21 @@ export function UsersToolbar({ search, statusFilter, roleFilter, roles, onSearch
           placeholder="Search users..."
           className="border border-slate-300 rounded-md px-3 py-2 text-sm min-w-56"
         />
-        <select value={statusFilter} onChange={(e) => onStatusChange(e.target.value)} className={selectCls}>
-          {["All", "Active", "Inactive"].map((s) => (
-            <option key={s} value={s}>
-              {s}
-            </option>
-          ))}
-        </select>
-        <select value={roleFilter} onChange={(e) => onRoleChange(e.target.value)} className={selectCls}>
-          <option value="All">All roles</option>
-          {roles.map((r) => (
-            <option key={r.id} value={r.name}>
-              {r.name}
-            </option>
-          ))}
-        </select>
+        <Select
+          value={statusFilter}
+          onChange={onStatusChange}
+          options={["All", "Active", "Inactive"]}
+          className="w-auto min-w-32"
+        />
+        <Select
+          value={roleFilter}
+          onChange={onRoleChange}
+          options={[
+            { value: "All", label: "All roles" },
+            ...roles.map((r) => ({ value: r.name, label: r.name })),
+          ]}
+          className="w-auto min-w-40"
+        />
       </div>
       <div className="flex items-center gap-2">
         {extraAction}
