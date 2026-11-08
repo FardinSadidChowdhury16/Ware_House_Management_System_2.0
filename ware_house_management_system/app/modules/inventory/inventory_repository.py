@@ -120,8 +120,8 @@ class InventoryRepository:
         from app.models.product import Product, ProductVariant
         from app.models.warehouse import Warehouse
         from app.models.party import Supplier, Customer
-        from app.models.warehouse import Warehouse
         from app.models.access_control import User
+        from app.models.inventory import SerializedItem
         
         query = self.db.query(StockMovement)
         
@@ -277,7 +277,6 @@ class InventoryRepository:
                 dt_to = dt.combine(d_t + timedelta(days=1), time.min) + timedelta(hours=6)
                 query = query.filter(StockMovement.created_at < dt_to)
         if barcode and str(barcode).strip():
-            from app.models.inventory import SerializedItem
             pattern = f"%{str(barcode).strip()}%"
             query = query.filter(
                 or_(
@@ -310,8 +309,6 @@ class InventoryRepository:
                 )
             )
         if search and search.strip():
-            from app.models.access_control import User
-
             pattern = f"%{search.strip()}%"
             query = query.filter(
                 or_(
