@@ -602,14 +602,23 @@ export function StockInPage() {
   const [search, setSearch] = useState("");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
+  const [localWarehouseId, setLocalWarehouseId] = useState(
+    selectedWarehouseId ? String(selectedWarehouseId) : "all"
+  );
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [viewingMovement, setViewingMovement] = useState(null);
+
+  useEffect(() => {
+    if (selectedWarehouseId) {
+      setLocalWarehouseId(String(selectedWarehouseId));
+    }
+  }, [selectedWarehouseId]);
 
   const queryParams = {
     page,
     page_size: 10,
     search: search.trim() || undefined,
-    warehouse_id: selectedWarehouseId ?? undefined,
+    warehouse_id: localWarehouseId !== "all" && localWarehouseId ? Number(localWarehouseId) : undefined,
     date_from: fromDate || undefined,
     date_to: toDate || undefined,
   };
@@ -664,6 +673,22 @@ export function StockInPage() {
           }} 
           className="min-w-[180px] max-w-xs shrink-0"
         />
+        <Select
+          value={localWarehouseId}
+          onChange={(val) => {
+            setLocalWarehouseId(val);
+            setPage(1);
+          }}
+          options={[
+            { value: "all", label: "All Warehouses" },
+            ...(warehouses && warehouses.length > 0 ? warehouses : (myWarehouses || [])).map((w) => ({
+              value: String(w.id),
+              label: `${w.name}${w.code ? ` (${w.code})` : ""}`,
+            })),
+          ]}
+          className="min-w-36 w-auto text-xs py-1.5"
+          placeholder="All Warehouses"
+        />
         <DateRangeFilter
           fromDate={fromDate}
           toDate={toDate}
@@ -695,7 +720,14 @@ export function StockInPage() {
                   </td>
                 </tr>
               ) : movements.length === 0 ? (
-                <EmptyTable cols={7} message="No stock movements found. Submit a Stock In request to get started." />
+                <EmptyTable 
+                  cols={7} 
+                  message={
+                    (search || fromDate || toDate || (localWarehouseId && localWarehouseId !== "all"))
+                      ? "No stock movements found matching the selected filters."
+                      : "No stock movements found. Submit a Stock In request to get started."
+                  } 
+                />
               ) : (
                 movements.map((m) => (
                   <tr key={m.id} className="hover:bg-slate-50/50">

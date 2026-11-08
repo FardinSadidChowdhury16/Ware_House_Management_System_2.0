@@ -191,13 +191,14 @@ class StockMovementListItem(BaseModel):
     customer_id: Optional[int] = None
     customer_name: Optional[str] = None
     reference_type: Optional[str] = None
-    reference_id: Optional[int] = None
+    reference_id: Optional[Any] = None
     reference_number: Optional[str] = None
     note: Optional[str] = None
+    attachment_url: Optional[str] = None
     created_by: Optional[int] = None
     created_by_name: Optional[str] = None
-    created_at: datetime
-    model_config = ConfigDict(from_attributes=True)
+    created_at: Optional[datetime] = None
+    model_config = ConfigDict(from_attributes=True, extra="ignore")
 
 class PaginatedMovementsResponse(BaseModel):
     items: List[StockMovementListItem]

@@ -138,13 +138,20 @@ class InventoryRepository:
             "adjustment_out",
             "service_out",
             "replace_out",
+            "outbound",
+            "stock_out",
+            "sale",
+            "out",
             "SALE_OUT",
             "TRANSFER_OUT",
             "ADJUSTMENT_OUT",
             "SERVICE_OUT",
             "REPLACE_OUT",
+            "OUTBOUND",
+            "STOCK_OUT",
+            "SALE",
+            "OUT",
         ]
-        OUTBOUND_TYPES = outbound_enums + outbound_strings
 
         inbound_enums = [
             MovementType.PURCHASE_IN,
@@ -161,21 +168,28 @@ class InventoryRepository:
             "return_in",
             "service_in",
             "replace_in",
+            "inbound",
+            "stock_in",
+            "purchase",
+            "in",
             "PURCHASE_IN",
             "TRANSFER_IN",
             "ADJUSTMENT_IN",
             "RETURN_IN",
             "SERVICE_IN",
             "REPLACE_IN",
+            "INBOUND",
+            "STOCK_IN",
+            "PURCHASE",
+            "IN",
         ]
-        INBOUND_TYPES = inbound_enums + inbound_strings
 
         if direction == "out":
             query = query.filter(
                 or_(
-                    StockMovement.movement_type.in_(OUTBOUND_TYPES),
-                    cast(StockMovement.movement_type, String).ilike("%out"),
+                    StockMovement.movement_type.in_(outbound_enums),
                     cast(StockMovement.movement_type, String).in_(outbound_strings),
+                    cast(StockMovement.movement_type, String).ilike("%out%"),
                 )
             )
             if warehouse_id:
@@ -185,7 +199,7 @@ class InventoryRepository:
                         StockMovement.to_warehouse_id == warehouse_id,
                     )
                 )
-            elif allowed_warehouse_ids is not None:
+            elif allowed_warehouse_ids is not None and len(allowed_warehouse_ids) > 0:
                 query = query.filter(
                     or_(
                         StockMovement.from_warehouse_id.in_(allowed_warehouse_ids),
@@ -195,9 +209,9 @@ class InventoryRepository:
         elif direction == "in":
             query = query.filter(
                 or_(
-                    StockMovement.movement_type.in_(INBOUND_TYPES),
-                    cast(StockMovement.movement_type, String).ilike("%in"),
+                    StockMovement.movement_type.in_(inbound_enums),
                     cast(StockMovement.movement_type, String).in_(inbound_strings),
+                    cast(StockMovement.movement_type, String).ilike("%in%"),
                 )
             )
             if warehouse_id:
@@ -207,7 +221,7 @@ class InventoryRepository:
                         StockMovement.from_warehouse_id == warehouse_id,
                     )
                 )
-            elif allowed_warehouse_ids is not None:
+            elif allowed_warehouse_ids is not None and len(allowed_warehouse_ids) > 0:
                 query = query.filter(
                     or_(
                         StockMovement.to_warehouse_id.in_(allowed_warehouse_ids),
@@ -219,7 +233,7 @@ class InventoryRepository:
                 query = query.filter(
                     or_(StockMovement.from_warehouse_id == warehouse_id, StockMovement.to_warehouse_id == warehouse_id)
                 )
-            elif allowed_warehouse_ids is not None:
+            elif allowed_warehouse_ids is not None and len(allowed_warehouse_ids) > 0:
                 query = query.filter(
                     or_(
                         StockMovement.from_warehouse_id.in_(allowed_warehouse_ids),
@@ -232,10 +246,36 @@ class InventoryRepository:
         if movement_type:
             query = query.filter(StockMovement.movement_type == movement_type)
         if date_from:
-            query = query.filter(StockMovement.created_at >= date_from)
+            d_f = None
+            if isinstance(date_from, str):
+                try:
+                    from datetime import datetime as dt_mod
+                    d_f = dt_mod.strptime(date_from.strip().split("T")[0], "%Y-%m-%d").date()
+                except Exception:
+                    pass
+            elif hasattr(date_from, "year"):
+                d_f = date_from if not hasattr(date_from, "date") else date_from.date()
+            if d_f:
+                from datetime import datetime as dt, time, timedelta
+                # Offset by -6 hours to accommodate Bangladesh timezone (UTC+6)
+                dt_from = dt.combine(d_f, time.min) - timedelta(hours=6)
+                query = query.filter(StockMovement.created_at >= dt_from)
+
         if date_to:
-            from datetime import timedelta
-            query = query.filter(StockMovement.created_at < date_to + timedelta(days=1))
+            d_t = None
+            if isinstance(date_to, str):
+                try:
+                    from datetime import datetime as dt_mod
+                    d_t = dt_mod.strptime(date_to.strip().split("T")[0], "%Y-%m-%d").date()
+                except Exception:
+                    pass
+            elif hasattr(date_to, "year"):
+                d_t = date_to if not hasattr(date_to, "date") else date_to.date()
+            if d_t:
+                from datetime import datetime as dt, time, timedelta
+                # Offset by +6 hours to cover end of day in Bangladesh timezone
+                dt_to = dt.combine(d_t + timedelta(days=1), time.min) + timedelta(hours=6)
+                query = query.filter(StockMovement.created_at < dt_to)
         if barcode and str(barcode).strip():
             from app.models.inventory import SerializedItem
             pattern = f"%{str(barcode).strip()}%"

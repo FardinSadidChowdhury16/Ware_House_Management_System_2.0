@@ -26,14 +26,21 @@ router = APIRouter(tags=["Inventory"])
 def _resolve_user_warehouses(db: Session, user: User, requested_id: Optional[int] = None):
     u = db.query(User).filter(User.id == user.id).first()
     assigned = [w.id for w in u.warehouses] if u and u.warehouses else []
-    is_admin = bool(u and u.role and ("admin" in u.role.name.lower() or "administrator" in u.role.name.lower()))
+    is_admin = bool(
+        u and u.role and (
+            "admin" in u.role.name.lower()
+            or "administrator" in u.role.name.lower()
+            or "superadmin" in u.role.name.lower()
+            or "manager" in u.role.name.lower()
+        )
+    )
     
     if requested_id is not None:
-        if not is_admin and requested_id not in assigned:
+        if not is_admin and assigned and requested_id not in assigned:
             return False, []
         return True, [requested_id]
         
-    return True, (assigned if not is_admin else None)
+    return True, (assigned if (not is_admin and assigned) else None)
 
 
 @router.post("/items", response_model=SerializedItemResponse, status_code=status.HTTP_201_CREATED)

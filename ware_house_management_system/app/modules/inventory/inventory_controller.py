@@ -88,10 +88,29 @@ class InventoryController:
     ) -> PaginatedMovementsResponse:
         service = InventoryService(db)
         
-        # Convert string dates to datetime.date if they exist
+        # Robust string date parsing to date objects
         from datetime import datetime
-        d_from = datetime.strptime(date_from, "%Y-%m-%d").date() if date_from else None
-        d_to = datetime.strptime(date_to, "%Y-%m-%d").date() if date_to else None
+        d_from = None
+        if date_from and str(date_from).strip():
+            clean_from = str(date_from).strip().split("T")[0]
+            try:
+                d_from = datetime.strptime(clean_from, "%Y-%m-%d").date()
+            except Exception:
+                try:
+                    d_from = datetime.fromisoformat(str(date_from).strip()).date()
+                except Exception:
+                    d_from = None
+
+        d_to = None
+        if date_to and str(date_to).strip():
+            clean_to = str(date_to).strip().split("T")[0]
+            try:
+                d_to = datetime.strptime(clean_to, "%Y-%m-%d").date()
+            except Exception:
+                try:
+                    d_to = datetime.fromisoformat(str(date_to).strip()).date()
+                except Exception:
+                    d_to = None
         
         items, total = service.repo.get_movements_paginated(
             page=page,
