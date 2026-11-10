@@ -120,6 +120,7 @@ class InventoryRepository:
         from app.models.product import Product, ProductVariant
         from app.models.warehouse import Warehouse
         from app.models.party import Supplier, Customer
+        from app.models.project import Project
         from app.models.access_control import User
         from app.models.inventory import SerializedItem
         
@@ -306,6 +307,10 @@ class InventoryRepository:
                         Customer.id == StockMovement.customer_id,
                         Customer.name.ilike(pattern),
                     ).exists(),
+                    self.db.query(Project.id).filter(
+                        Project.id == StockMovement.project_id,
+                        or_(Project.name.ilike(pattern), Project.code.ilike(pattern)),
+                    ).exists(),
                 )
             )
         if search and search.strip():
@@ -341,6 +346,10 @@ class InventoryRepository:
                         Customer.id == StockMovement.customer_id,
                         Customer.name.ilike(pattern),
                     ).exists(),
+                    self.db.query(Project.id).filter(
+                        Project.id == StockMovement.project_id,
+                        or_(Project.name.ilike(pattern), Project.code.ilike(pattern)),
+                    ).exists(),
                     self.db.query(SerializedItem.id).filter(
                         SerializedItem.id == StockMovement.product_item_id,
                         or_(SerializedItem.serial_number.ilike(pattern), SerializedItem.barcode.ilike(pattern)),
@@ -366,6 +375,7 @@ class InventoryRepository:
             to_wh = self.db.query(Warehouse).filter(Warehouse.id == m.to_warehouse_id).first() if m.to_warehouse_id else None
             supplier = self.db.query(Supplier).filter(Supplier.id == m.supplier_id).first() if m.supplier_id else None
             customer = self.db.query(Customer).filter(Customer.id == m.customer_id).first() if m.customer_id else None
+            project = self.db.query(Project).filter(Project.id == m.project_id).first() if getattr(m, "project_id", None) else None
             serialized_item = self.db.query(SerializedItem).filter(SerializedItem.id == m.product_item_id).first() if m.product_item_id else None
             creator = self.db.query(User).filter(User.id == m.created_by).first() if m.created_by else None
 
@@ -428,6 +438,9 @@ class InventoryRepository:
                 "supplier_name": supplier.name if supplier else None,
                 "customer_id": m.customer_id,
                 "customer_name": customer.name if customer else None,
+                "project_id": getattr(m, "project_id", None),
+                "project_name": project.name if project else None,
+                "project_code": project.code if project else None,
                 "reference_type": m.reference_type,
                 "reference_id": m.reference_id,
                 "reference_number": ref_number,

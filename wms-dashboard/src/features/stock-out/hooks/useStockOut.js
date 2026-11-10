@@ -32,6 +32,12 @@ export function useStockOut(params = {}) {
     staleTime: 5 * 60 * 1000,
   });
 
+  const { data: projects, isLoading: isLoadingProjects } = useQuery({
+    queryKey: queryKeys.projects ? queryKeys.projects.all : ["projects"],
+    queryFn: () => stockOutApi.listProjects(),
+    staleTime: 5 * 60 * 1000,
+  });
+
   const { data: products, isLoading: isLoadingProducts } = useQuery({
     queryKey: ["products", "summary"],
     queryFn: () => stockOutApi.listProductsSummary(),
@@ -67,6 +73,8 @@ export function useStockOut(params = {}) {
     isLoadingWarehouses,
     customers: customers || EMPTY_ARRAY,
     isLoadingCustomers,
+    projects: projects || EMPTY_ARRAY,
+    isLoadingProjects,
     products: products || EMPTY_ARRAY,
     isLoadingProducts,
     createStockOut: createStockOutMutation.mutateAsync,

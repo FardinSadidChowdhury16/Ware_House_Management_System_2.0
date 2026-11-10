@@ -14,6 +14,7 @@ class SerializedItemBase(BaseModel):
     photo_url: Optional[str] = None
     supplier_id: Optional[int] = None
     customer_id: Optional[int] = None
+    project_id: Optional[int] = None
     warranty_start: Optional[date] = None
     warranty_end: Optional[date] = None
     description: Optional[str] = None
@@ -67,6 +68,7 @@ class StockMovementCreate(BaseModel):
     to_warehouse_id: Optional[int] = None
     supplier_id: Optional[int] = None
     customer_id: Optional[int] = None
+    project_id: Optional[int] = None
     reference_type: Optional[str] = None
     reference_id: Optional[int] = None
     note: Optional[str] = None
@@ -115,6 +117,8 @@ class StockOutLineItem(BaseModel):
 class StockOutRequest(BaseModel):
     warehouse_id: int
     customer_id: Optional[int] = None
+    project_id: Optional[int] = None
+    customer_name: Optional[str] = None
     reference_number: Optional[str] = None
     note: Optional[str] = None
     attachment_url: Optional[str] = None
@@ -190,6 +194,9 @@ class StockMovementListItem(BaseModel):
     supplier_name: Optional[str] = None
     customer_id: Optional[int] = None
     customer_name: Optional[str] = None
+    project_id: Optional[int] = None
+    project_name: Optional[str] = None
+    project_code: Optional[str] = None
     reference_type: Optional[str] = None
     reference_id: Optional[Any] = None
     reference_number: Optional[str] = None

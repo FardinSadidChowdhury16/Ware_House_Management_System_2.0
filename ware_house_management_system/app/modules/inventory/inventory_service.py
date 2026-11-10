@@ -355,6 +355,8 @@ class InventoryService:
                     si.warehouse_id = None
                     if data.customer_id:
                         si.customer_id = data.customer_id
+                    if getattr(data, "project_id", None):
+                        si.project_id = data.project_id
                     self.db.add(si)
                     self.db.flush()
 
@@ -366,6 +368,7 @@ class InventoryService:
                         quantity=1,
                         from_warehouse_id=data.warehouse_id,
                         customer_id=data.customer_id,
+                        project_id=getattr(data, "project_id", None),
                         reference_type="sale_out",
                         reference_id=ref_id,
                         note=combined_note,
@@ -403,6 +406,7 @@ class InventoryService:
                     quantity=item.quantity,
                     from_warehouse_id=data.warehouse_id,
                     customer_id=data.customer_id,
+                    project_id=getattr(data, "project_id", None),
                     reference_type="sale_out",
                     reference_id=ref_id,
                     note=combined_note,

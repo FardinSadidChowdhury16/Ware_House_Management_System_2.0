@@ -30,6 +30,9 @@ class StockApprovalResponse(BaseModel):
     supplier_name: Optional[str] = None
     customer_id: Optional[int] = None
     customer_name: Optional[str] = None
+    project_id: Optional[int] = None
+    project_name: Optional[str] = None
+    project_code: Optional[str] = None
     requested_by: Optional[int] = None
     requested_by_name: Optional[str] = None
     reviewed_by: Optional[int] = None

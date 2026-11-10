@@ -12,7 +12,8 @@ import { MovementDetailModal } from "../../../shared/components/MovementDetailMo
 import { formatBDDateTime } from "../../../shared/utils/dateUtils.js";
 import { 
   Plus, Trash2, Check, Eye,
-  Info, ScanLine, AlertCircle, Clock, Paperclip
+  Info, ScanLine, AlertCircle, Clock, Paperclip,
+  FolderKanban, UserCheck
 } from "lucide-react";
 
 // ─── Customer Details Modal ────────────────────────────────────────────────
@@ -84,17 +85,97 @@ function CustomerDetailModal({ isOpen, onClose, customerId, customers }) {
   );
 }
 
+// ─── Project Details Modal ────────────────────────────────────────────────
+function ProjectDetailModal({ isOpen, onClose, projectId, projects }) {
+  const [detail, setDetail] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen || !projectId) { setDetail(null); return; }
+    const local = projects?.find(p => String(p.id) === String(projectId));
+    if (local) { setDetail(local); return; }
+    setLoading(true);
+    stockOutApi.getProjectDetail(projectId)
+      .then(setDetail)
+      .catch(() => setDetail(null))
+      .finally(() => setLoading(false));
+  }, [isOpen, projectId, projects]);
+
+  if (!isOpen) return null;
+
+  return (
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Project Details"
+      size="sm"
+      footer={<GhostButton onClick={onClose}>Close</GhostButton>}
+    >
+      {loading ? (
+        <p className="text-sm text-slate-400 text-center py-4">Loading...</p>
+      ) : !detail ? (
+        <p className="text-sm text-slate-400 text-center py-4">No details found.</p>
+      ) : (
+        <div className="space-y-3">
+          <div>
+            <p className="text-xs font-medium text-slate-400 uppercase tracking-wide">Project Name</p>
+            <p className="text-sm font-semibold text-slate-800">{detail.name}</p>
+            {detail.code && (
+              <span className="inline-block mt-1 px-2 py-0.5 text-xs font-mono font-medium rounded bg-indigo-50 text-indigo-700 border border-indigo-200">
+                {detail.code}
+              </span>
+            )}
+          </div>
+          {detail.location && detail.location !== "—" && (
+            <div>
+              <p className="text-xs font-medium text-slate-400 uppercase tracking-wide">Location</p>
+              <p className="text-sm text-slate-700">{detail.location}</p>
+            </div>
+          )}
+          {detail.contact_info && detail.contact_info !== "—" && (
+            <div>
+              <p className="text-xs font-medium text-slate-400 uppercase tracking-wide">Contact Info</p>
+              <p className="text-sm text-slate-700">{detail.contact_info}</p>
+            </div>
+          )}
+          {detail.description && detail.description !== "—" && (
+            <div>
+              <p className="text-xs font-medium text-slate-400 uppercase tracking-wide">Description</p>
+              <p className="text-sm text-slate-600">{detail.description}</p>
+            </div>
+          )}
+          {detail.status && (
+            <div>
+              <p className="text-xs font-medium text-slate-400 uppercase tracking-wide">Status</p>
+              <span className={`inline-block mt-0.5 px-2 py-0.5 text-xs font-semibold rounded capitalize ${
+                detail.status === "active" ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-slate-100 text-slate-600"
+              }`}>
+                {detail.status}
+              </span>
+            </div>
+          )}
+        </div>
+      )}
+    </Modal>
+  );
+}
+
 // ─── New Stock Out Modal ───────────────────────────────────────────────────
-function NewStockOutModal({ isOpen, onClose, onSuccess, warehouses, customers, defaultWarehouseId }) {
+function NewStockOutModal({ isOpen, onClose, onSuccess, warehouses, customers, projects = [], defaultWarehouseId }) {
   const { createStockOut, isCreating } = useStockOut();
   const { showToast } = useToast();
   
   const [warehouseId, setWarehouseId] = useState("");
+  const [destinationType, setDestinationType] = useState("customer"); // "customer" | "project"
   const [customerId, setCustomerId] = useState("");
+  const [customerName, setCustomerName] = useState("");
+  const [customerInputMode, setCustomerInputMode] = useState("select"); // "select" | "manual"
+  const [projectId, setProjectId] = useState("");
   const [referenceNumber, setReferenceNumber] = useState("");
   const [note, setNote] = useState("");
   const [attachmentUrl, setAttachmentUrl] = useState("");
   const [showCustomerDetail, setShowCustomerDetail] = useState(false);
+  const [showProjectDetail, setShowProjectDetail] = useState(false);
   
   const [items, setItems] = useState([
     {
@@ -413,14 +494,28 @@ function NewStockOutModal({ isOpen, onClose, onSuccess, warehouses, customers, d
     }
 
     try {
-      await createStockOut({
+      const payload = {
         warehouse_id: Number(warehouseId),
-        customer_id: customerId ? Number(customerId) : undefined,
         reference_number: referenceNumber.trim() || undefined,
         note: note.trim() || undefined,
         attachment_url: attachmentUrl || undefined,
         items: formattedItems
-      });
+      };
+
+      if (destinationType === "project") {
+        if (projectId) {
+          payload.project_id = Number(projectId);
+        }
+      } else {
+        if (customerId) {
+          payload.customer_id = Number(customerId);
+        }
+        if (customerName.trim()) {
+          payload.customer_name = customerName.trim();
+        }
+      }
+
+      await createStockOut(payload);
       showToast({ 
         title: "Submitted for Approval", 
         message: "Stock Out request submitted successfully and is pending approval.", 
@@ -473,34 +568,143 @@ function NewStockOutModal({ isOpen, onClose, onSuccess, warehouses, customers, d
                 placeholder="Select Warehouse"
               />
             </Field>
-            <Field label="Customer (Optional)">
-              <div className="flex items-center gap-2 w-full min-w-0">
-                <div className="flex-1 min-w-0">
-                  <Select 
-                    value={customerId} 
-                    onChange={setCustomerId}
-                    options={customers
-                      .filter(c => c.status !== false)
-                      .map(c => ({
-                        label: `${c.name}${c.phone ? ` (${c.phone})` : ""}`,
-                        value: String(c.id),
-                      }))
-                    }
-                    placeholder="Select Customer"
-                  />
-                </div>
-                {customerId && (
+
+            {/* Destination Selection: Customer vs Project */}
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-xs font-semibold text-slate-700">
+                  Dispatch Destination
+                </label>
+                <div className="inline-flex p-0.5 bg-slate-200/80 rounded-lg text-xs font-medium">
                   <button
                     type="button"
-                    title="View customer details"
-                    onClick={() => setShowCustomerDetail(true)}
-                    className="flex-shrink-0 w-9 h-9 rounded-md bg-blue-50 text-blue-600 flex items-center justify-center hover:bg-blue-100 transition-colors border border-blue-200"
+                    onClick={() => {
+                      setDestinationType("customer");
+                      setProjectId("");
+                    }}
+                    className={`px-2.5 py-1 rounded-md transition-all flex items-center gap-1.5 ${
+                      destinationType === "customer"
+                        ? "bg-white text-blue-600 shadow-sm font-semibold"
+                        : "text-slate-600 hover:text-slate-900"
+                    }`}
                   >
-                    <Info size={15} />
+                    <UserCheck size={12} />
+                    Customer
                   </button>
-                )}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDestinationType("project");
+                      setCustomerId("");
+                      setCustomerName("");
+                    }}
+                    className={`px-2.5 py-1 rounded-md transition-all flex items-center gap-1.5 ${
+                      destinationType === "project"
+                        ? "bg-white text-indigo-600 shadow-sm font-semibold"
+                        : "text-slate-600 hover:text-slate-900"
+                    }`}
+                  >
+                    <FolderKanban size={12} />
+                    Project
+                  </button>
+                </div>
               </div>
-            </Field>
+
+              {destinationType === "customer" ? (
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-2 w-full min-w-0">
+                    <div className="flex-1 min-w-0">
+                      {customerInputMode === "select" ? (
+                        <Select 
+                          value={customerId} 
+                          onChange={(val) => {
+                            setCustomerId(val);
+                            const found = customers.find(c => String(c.id) === String(val));
+                            if (found) setCustomerName(found.name);
+                          }}
+                          options={customers
+                            .filter(c => c.status !== false)
+                            .map(c => ({
+                              label: `${c.name}${c.phone ? ` (${c.phone})` : ""}`,
+                              value: String(c.id),
+                            }))
+                          }
+                          placeholder="Select Customer"
+                        />
+                      ) : (
+                        <TextInput 
+                          value={customerName}
+                          onChange={(val) => {
+                            const str = typeof val === "string" ? val : val?.target?.value ?? "";
+                            setCustomerName(str);
+                          }}
+                          placeholder="Type customer name..."
+                        />
+                      )}
+                    </div>
+                    {destinationType === "customer" && customerInputMode === "select" && customerId && (
+                      <button
+                        type="button"
+                        title="View customer details"
+                        onClick={() => setShowCustomerDetail(true)}
+                        className="flex-shrink-0 w-9 h-9 rounded-md bg-blue-50 text-blue-600 flex items-center justify-center hover:bg-blue-100 transition-colors border border-blue-200"
+                      >
+                        <Info size={15} />
+                      </button>
+                    )}
+                  </div>
+                  <div className="flex items-center justify-between text-[11px] text-slate-500 px-0.5">
+                    <span>
+                      {customerInputMode === "select" ? "From registered customers" : "Custom customer name"}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (customerInputMode === "select") {
+                          setCustomerInputMode("manual");
+                          setCustomerId("");
+                        } else {
+                          setCustomerInputMode("select");
+                          setCustomerName("");
+                        }
+                      }}
+                      className="text-blue-600 hover:text-blue-800 font-medium underline underline-offset-2"
+                    >
+                      {customerInputMode === "select" ? "Or write name manually" : "Or pick registered customer"}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2 w-full min-w-0">
+                    <div className="flex-1 min-w-0">
+                      <Select 
+                        value={projectId} 
+                        onChange={setProjectId}
+                        options={projects.map(p => ({
+                          label: `${p.name}${p.code ? ` (${p.code})` : ""}${p.location ? ` — ${p.location}` : ""}`,
+                          value: String(p.id),
+                        }))}
+                        placeholder={projects.length === 0 ? "No projects created yet" : "Select Project"}
+                      />
+                    </div>
+                    {projectId && (
+                      <button
+                        type="button"
+                        title="View project details"
+                        onClick={() => setShowProjectDetail(true)}
+                        className="flex-shrink-0 w-9 h-9 rounded-md bg-indigo-50 text-indigo-600 flex items-center justify-center hover:bg-indigo-100 transition-colors border border-indigo-200"
+                      >
+                        <Info size={15} />
+                      </button>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-slate-500 px-0.5">
+                    Select target project for this dispatch
+                  </p>
+                </div>
+              )}
+            </div>
             <Field label="Reference # (e.g. Sales Invoice / DO #)">
               <TextInput 
                 value={referenceNumber} 
@@ -718,6 +922,14 @@ function NewStockOutModal({ isOpen, onClose, onSuccess, warehouses, customers, d
         customerId={customerId}
         customers={customers}
       />
+
+      {/* Project Details Modal */}
+      <ProjectDetailModal
+        isOpen={showProjectDetail}
+        onClose={() => setShowProjectDetail(false)}
+        projectId={projectId}
+        projects={projects}
+      />
     </>
   );
 }
@@ -757,6 +969,7 @@ export function StockOutPage() {
     isLoadingMovements,
     warehouses,
     customers,
+    projects,
   } = useStockOut(queryParams);
 
   return (
@@ -779,7 +992,7 @@ export function StockOutPage() {
                 { label: "Tracking Type", value: (m) => m.tracking_type || "—" },
                 { label: "Quantity", value: (m) => `-${m.quantity ?? 1}` },
                 { label: "Source Warehouse", value: (m) => m.from_warehouse_name || (m.from_warehouse_id ? `WH #${m.from_warehouse_id}` : "—") },
-                { label: "Customer", value: (m) => m.customer_name || "—" },
+                { label: "Customer / Project", value: (m) => m.project_name ? `Project: ${m.project_name}${m.project_code ? ` (${m.project_code})` : ""}` : (m.customer_name || "—") },
                 { label: "Dispatched By", value: (m) => m.created_by_name || (m.created_by ? `User #${m.created_by}` : "—") },
                 { label: "Movement Type", value: (m) => m.movement_type || "sale_out" },
                 { label: "Notes", value: (m) => m.note || "—" },
@@ -842,7 +1055,7 @@ export function StockOutPage() {
                 <Th>Barcode / Serial</Th>
                 <Th>Qty</Th>
                 <Th>Source WH</Th>
-                <Th>Customer</Th>
+                <Th>Customer / Project</Th>
                 <Th>Dispatched By</Th>
                 <Th className="text-right">Action</Th>
               </tr>
@@ -905,8 +1118,27 @@ export function StockOutPage() {
                     <Td className="text-xs font-medium text-slate-700">
                       {m.from_warehouse_name || (m.from_warehouse_id ? `WH #${m.from_warehouse_id}` : "—")}
                     </Td>
-                    <Td className="text-xs text-slate-600">
-                      {m.customer_name || "—"}
+                    <Td className="text-xs">
+                      {m.project_name ? (
+                        <div className="flex flex-col items-start gap-0.5">
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                            <FolderKanban size={11} className="shrink-0" />
+                            {m.project_name}
+                          </span>
+                          {m.project_code && (
+                            <span className="text-[10px] text-slate-400 font-mono pl-1">
+                              {m.project_code}
+                            </span>
+                          )}
+                        </div>
+                      ) : m.customer_name ? (
+                        <span className="font-medium text-slate-700 flex items-center gap-1">
+                          <UserCheck size={12} className="shrink-0 text-slate-400" />
+                          {m.customer_name}
+                        </span>
+                      ) : (
+                        <span className="text-slate-400">—</span>
+                      )}
                     </Td>
                     <Td className="text-xs text-slate-600 font-medium">
                       {m.created_by_name || (m.created_by ? `User #${m.created_by}` : "—")}
@@ -963,6 +1195,7 @@ export function StockOutPage() {
           }}
           warehouses={warehouses && warehouses.length > 0 ? warehouses : (myWarehouses || [])}
           customers={customers}
+          projects={projects}
           defaultWarehouseId={selectedWarehouseId}
         />
       )}

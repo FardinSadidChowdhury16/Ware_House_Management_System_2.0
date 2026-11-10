@@ -14,6 +14,7 @@ import {
   ArrowDownLeft,
   ArrowUpRight,
   Wrench,
+  FolderKanban,
 } from "lucide-react";
 import { Badge, GhostButton, Modal } from "../../components/ui/index.js";
 import { httpClient } from "../../core/api/httpClient.js";
@@ -114,7 +115,13 @@ export function MovementDetailModal({ movement, direction, onClose }) {
   const warehouseName = isInbound
     ? movement.to_warehouse_name
     : movement.from_warehouse_name;
-  const partyName = isInbound ? movement.supplier_name : movement.customer_name;
+  const isProject = !isInbound && !!(movement.project_name || movement.project_id);
+  const partyLabel = isInbound ? "Supplier" : (isProject ? "Project" : "Customer");
+  const partyName = isInbound
+    ? movement.supplier_name
+    : (isProject
+        ? `${movement.project_name || "Project"}${movement.project_code ? ` (${movement.project_code})` : ""}`
+        : movement.customer_name);
 
   // Extract clean reference number (avoiding duplication)
   let reference = movement.reference_number;
@@ -252,11 +259,13 @@ export function MovementDetailModal({ movement, direction, onClose }) {
             </div>
             <div>
               <span className="mb-0.5 block text-slate-400">
-                {isInbound ? "Supplier" : "Customer"}
+                {partyLabel}
               </span>
               <span className="flex items-center gap-1 font-semibold text-slate-800 truncate">
                 {isInbound ? (
                   <Truck size={13} className="shrink-0 text-slate-500" />
+                ) : isProject ? (
+                  <FolderKanban size={13} className="shrink-0 text-indigo-600" />
                 ) : (
                   <UserCheck size={13} className="shrink-0 text-slate-500" />
                 )}

@@ -211,6 +211,7 @@ class ApprovalsRepository:
         """Add human-readable names and item details to an approval record."""
         from app.models.warehouse import Warehouse
         from app.models.party import Supplier, Customer
+        from app.models.project import Project
         from app.models.access_control import User
         from app.models.product import Product, ProductVariant, ProductType
         from app.models.inventory import SerializedItem, BulkWarehouseStock, ItemStatus
@@ -224,6 +225,9 @@ class ApprovalsRepository:
         enriched_payload = dict(a.payload) if isinstance(a.payload, dict) else {}
         cust_id = enriched_payload.get("customer_id")
         cust = self.db.query(Customer).filter(Customer.id == cust_id).first() if cust_id else None
+
+        project_id = enriched_payload.get("project_id")
+        project = self.db.query(Project).filter(Project.id == project_id).first() if project_id else None
 
         to_wh_id = enriched_payload.get("to_warehouse_id")
         to_wh = self.db.query(Warehouse).filter(Warehouse.id == to_wh_id).first() if to_wh_id else None
@@ -337,6 +341,9 @@ class ApprovalsRepository:
             "supplier_name": sup.name if sup else None,
             "customer_id": cust_id,
             "customer_name": cust.name if cust else None,
+            "project_id": project_id,
+            "project_name": project.name if project else None,
+            "project_code": project.code if project else None,
             "requested_by": a.requested_by,
             "requested_by_name": (f"{requester.name} (Deleted)" if getattr(requester, "is_deleted", False) else requester.name) if requester else None,
             "reviewed_by": a.reviewed_by,
