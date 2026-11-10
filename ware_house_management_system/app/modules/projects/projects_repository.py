@@ -267,15 +267,19 @@ class ProjectRepository:
 
     def get_project_summary_report(
         self,
+        project_id: Optional[str] = None,
         date_from: Optional[str] = None,
         date_to: Optional[str] = None,
         status: Optional[str] = None,
         warehouse_id: Optional[int] = None,
         search: Optional[str] = None,
+        tracking_type: Optional[str] = None,
     ) -> dict:
         from datetime import datetime, time, timedelta
         from app.models.inventory import StockMovement, SerializedItem
+        from app.models.product import Product
 
+        # 1. Parse string dates safely
         d_from = None
         if date_from and str(date_from).strip():
             clean_from = str(date_from).strip().split("T")[0]
@@ -308,43 +312,52 @@ class ProjectRepository:
 
         has_date_filter = bool(dt_from or dt_to)
 
+        # 2. Query all matching projects
         p_query = self.db.query(Project)
-        if search and search.strip():
-            pat = f"%{search.strip()}%"
-            p_query = p_query.filter(
-                or_(
-                    Project.name.ilike(pat),
-                    Project.code.ilike(pat),
-                    Project.location.ilike(pat),
-                    Project.contact_info.ilike(pat),
-                )
-            )
         if status and status != "all":
             p_query = p_query.filter(Project.status == status)
 
-        projects = p_query.order_by(Project.created_at.desc(), Project.id.desc()).all()
+        clean_pid = None
+        if project_id and str(project_id).strip() not in ("all", "", "None"):
+            try:
+                clean_pid = int(str(project_id).strip())
+                p_query = p_query.filter(Project.id == clean_pid)
+            except Exception:
+                clean_pid = None
+
+        projects = p_query.order_by(Project.name.asc()).all()
         if not projects:
             return {
                 "summary": {
+                    "total_products": 0,
                     "total_projects": 0,
                     "active_projects": 0,
-                    "completed_projects": 0,
-                    "on_hold_projects": 0,
-                    "total_opening_balance": 0,
-                    "total_period_in": 0,
-                    "total_period_out": 0,
-                    "total_period_balance": 0,
-                    "total_closing_in": 0,
-                    "total_closing_out": 0,
-                    "total_closing_balance": 0,
-                    "total_shipments_in": 0,
-                    "total_shipments_out": 0,
+                    "total_opening_stock": 0,
+                    "total_stock_in": 0,
+                    "total_stock_out": 0,
+                    "total_remaining_stock": 0,
+                    "has_date_filter": has_date_filter,
                 },
                 "items": [],
+                "projects_summary": [],
+                "projects_list": [],
             }
 
-        project_ids = [p.id for p in projects]
+        proj_map = {p.id: p for p in projects}
+        project_ids = list(proj_map.keys())
 
+        # All projects for dropdown selection
+        all_projs_query = self.db.query(Project).order_by(Project.name.asc()).all()
+        projects_list = [
+            {"id": p.id, "name": p.name, "code": p.code, "status": p.status}
+            for p in all_projs_query
+        ]
+
+        # 3. Query all Products
+        all_products = self.db.query(Product).all()
+        prod_map = {pr.id: pr for pr in all_products}
+
+        # 4. Query movements associated with these projects
         sm_query = self.db.query(StockMovement).filter(StockMovement.project_id.in_(project_ids))
         if warehouse_id:
             sm_query = sm_query.filter(
@@ -360,197 +373,222 @@ class ProjectRepository:
             si_query = si_query.filter(SerializedItem.warehouse_id == warehouse_id)
         direct_serials = si_query.all()
 
-        movements_by_proj = {pid: [] for pid in project_ids}
+        pair_data = {}
+        project_stats = {
+            pid: {
+                "project_id": pid,
+                "project_name": proj_map[pid].name,
+                "project_code": proj_map[pid].code,
+                "location": proj_map[pid].location,
+                "status": proj_map[pid].status,
+                "opening_stock": 0,
+                "stock_in_qty": 0,
+                "stock_out_qty": 0,
+                "remaining_stock": 0,
+                "distinct_products": set(),
+            }
+            for pid in project_ids
+        }
+
+        def get_pair(pid, prid):
+            key = (pid, prid)
+            if key not in pair_data:
+                pair_data[key] = {
+                    "project_id": pid,
+                    "product_id": prid,
+                    "opening_in": 0,
+                    "opening_out": 0,
+                    "period_in": 0,
+                    "period_out": 0,
+                    "all_time_in": 0,
+                    "all_time_out": 0,
+                    "last_movement_at": None,
+                }
+            return pair_data[key]
+
         movement_serial_ids = set()
         for m in movements:
-            movements_by_proj[m.project_id].append(m)
+            if not m.product_id or m.project_id not in proj_map:
+                continue
+
             if m.product_item_id:
                 movement_serial_ids.add(m.product_item_id)
 
-        serials_by_proj = {pid: [] for pid in project_ids}
-        for s in direct_serials:
-            if s.id not in movement_serial_ids:
-                serials_by_proj[s.project_id].append(s)
+            rec = get_pair(m.project_id, m.product_id)
+            qty = m.quantity or 1
+            m_dt = m.created_at
 
-        items_report = []
-        tot_opening_bal = 0
-        tot_period_in = 0
-        tot_period_out = 0
-        tot_closing_in = 0
-        tot_closing_out = 0
-        tot_closing_bal = 0
-        tot_shipments_in = 0
-        tot_shipments_out = 0
+            if m_dt:
+                if rec["last_movement_at"] is None or m_dt > rec["last_movement_at"]:
+                    rec["last_movement_at"] = m_dt
 
-        active_count = 0
-        completed_count = 0
-        on_hold_count = 0
+            mov_type_str = (
+                m.movement_type.value
+                if hasattr(m.movement_type, "value")
+                else str(m.movement_type)
+            ).lower()
 
-        for p in projects:
-            if p.status == "active":
-                active_count += 1
-            elif p.status == "completed":
-                completed_count += 1
-            elif p.status == "on_hold":
-                on_hold_count += 1
+            is_inbound = (
+                m.to_warehouse_id is not None
+                or "in" in mov_type_str
+                or mov_type_str == "purchase_in"
+            ) and not (m.from_warehouse_id is not None and "out" in mov_type_str)
 
-            p_movs = movements_by_proj.get(p.id, [])
-            p_serials = serials_by_proj.get(p.id, [])
-
-            opening_in = 0
-            opening_out = 0
-            period_in = 0
-            period_out = 0
-            period_in_shipments = 0
-            period_out_shipments = 0
-            distinct_products = set()
-            last_inbound = None
-            last_outbound = None
-            last_activity = None
-
-            for m in p_movs:
-                qty = m.quantity or 1
-                distinct_products.add(m.product_id)
-                m_dt = m.created_at
-                if m_dt:
-                    if last_activity is None or m_dt > last_activity:
-                        last_activity = m_dt
-
-                mov_type_str = (
-                    m.movement_type.value
-                    if hasattr(m.movement_type, "value")
-                    else str(m.movement_type)
-                ).lower()
-
-                is_inbound = (
-                    m.to_warehouse_id is not None
-                    or "in" in mov_type_str
-                    or mov_type_str == "purchase_in"
-                ) and not (m.from_warehouse_id is not None and "out" in mov_type_str)
-
-                if is_inbound:
-                    if m_dt and (last_inbound is None or m_dt > last_inbound):
-                        last_inbound = m_dt
-                else:
-                    if m_dt and (last_outbound is None or m_dt > last_outbound):
-                        last_outbound = m_dt
-
+            if is_inbound:
+                rec["all_time_in"] += qty
                 if has_date_filter:
                     if dt_from and m_dt and m_dt < dt_from:
-                        if is_inbound:
-                            opening_in += qty
-                        else:
-                            opening_out += qty
+                        rec["opening_in"] += qty
                     elif (not dt_from or (m_dt and m_dt >= dt_from)) and (not dt_to or (m_dt and m_dt < dt_to)):
-                        if is_inbound:
-                            period_in += qty
-                            period_in_shipments += 1
-                        else:
-                            period_out += qty
-                            period_out_shipments += 1
+                        rec["period_in"] += qty
                 else:
-                    if is_inbound:
-                        period_in += qty
-                        period_in_shipments += 1
-                    else:
-                        period_out += qty
-                        period_out_shipments += 1
-
-            for s in p_serials:
-                distinct_products.add(s.product_id)
-                s_dt = s.created_at
-                if s_dt:
-                    if last_activity is None or s_dt > last_activity:
-                        last_activity = s_dt
-                    if last_inbound is None or s_dt > last_inbound:
-                        last_inbound = s_dt
-
+                    rec["period_in"] += qty
+            else:
+                rec["all_time_out"] += qty
                 if has_date_filter:
-                    if dt_from and s_dt and s_dt < dt_from:
-                        opening_in += 1
-                    elif (not dt_from or (s_dt and s_dt >= dt_from)) and (not dt_to or (s_dt and s_dt < dt_to)):
-                        period_in += 1
-                        period_in_shipments += 1
+                    if dt_from and m_dt and m_dt < dt_from:
+                        rec["opening_out"] += qty
+                    elif (not dt_from or (m_dt and m_dt >= dt_from)) and (not dt_to or (m_dt and m_dt < dt_to)):
+                        rec["period_out"] += qty
                 else:
-                    period_in += 1
-                    period_in_shipments += 1
+                    rec["period_out"] += qty
 
-            opening_balance = opening_in - opening_out
-            period_balance = period_in - period_out
-            closing_in = opening_in + period_in
-            closing_out = opening_out + period_out
-            closing_balance = closing_in - closing_out
+        for s in direct_serials:
+            if s.id in movement_serial_ids or not s.product_id or s.project_id not in proj_map:
+                continue
+            rec = get_pair(s.project_id, s.product_id)
+            s_dt = s.created_at
+            if s_dt:
+                if rec["last_movement_at"] is None or s_dt > rec["last_movement_at"]:
+                    rec["last_movement_at"] = s_dt
 
-            all_time_in = (
-                sum((m.quantity or 1) for m in p_movs if (
-                    m.to_warehouse_id is not None
-                    or "in" in (m.movement_type.value if hasattr(m.movement_type, "value") else str(m.movement_type)).lower()
-                ))
-                + len(p_serials)
-            )
-            all_time_out = sum(
-                (m.quantity or 1)
-                for m in p_movs
-                if not (
-                    m.to_warehouse_id is not None
-                    or "in" in (m.movement_type.value if hasattr(m.movement_type, "value") else str(m.movement_type)).lower()
+            rec["all_time_in"] += 1
+            if has_date_filter:
+                if dt_from and s_dt and s_dt < dt_from:
+                    rec["opening_in"] += 1
+                elif (not dt_from or (s_dt and s_dt >= dt_from)) and (not dt_to or (s_dt and s_dt < dt_to)):
+                    rec["period_in"] += 1
+            else:
+                rec["period_in"] += 1
+
+        # Build items list
+        items_report = []
+        tot_opening = 0
+        tot_in = 0
+        tot_out = 0
+        tot_remaining = 0
+        distinct_products_all = set()
+        distinct_projects_all = set()
+
+        search_clean = search.strip().lower() if (search and search.strip()) else None
+        target_tracking = tracking_type.lower() if (tracking_type and tracking_type.lower() != "all") else None
+
+        for (pid, prid), rec in pair_data.items():
+            p = proj_map.get(pid)
+            prod = prod_map.get(prid)
+            if not p or not prod:
+                continue
+
+            prod_tracking = (
+                prod.tracking_type.value
+                if hasattr(prod.tracking_type, "value")
+                else str(prod.tracking_type)
+            ).lower()
+
+            if target_tracking and prod_tracking != target_tracking:
+                continue
+
+            cat_name = prod.category.name if prod.category else "General"
+
+            # Search filtering across product and project
+            if search_clean:
+                matches = (
+                    search_clean in prod.name.lower()
+                    or (prod.product_code and search_clean in prod.product_code.lower())
+                    or search_clean in cat_name.lower()
+                    or search_clean in p.name.lower()
+                    or (p.code and search_clean in p.code.lower())
+                    or (p.location and search_clean in p.location.lower())
                 )
-            )
+                if not matches:
+                    continue
 
-            tot_opening_bal += opening_balance
-            tot_period_in += period_in
-            tot_period_out += period_out
-            tot_closing_in += closing_in
-            tot_closing_out += closing_out
-            tot_closing_bal += closing_balance
-            tot_shipments_in += period_in_shipments
-            tot_shipments_out += period_out_shipments
+            opening_stock = rec["opening_in"] - rec["opening_out"]
+            stock_in_qty = rec["period_in"]
+            stock_out_qty = rec["period_out"]
+            remaining_stock = opening_stock + stock_in_qty - stock_out_qty
+
+            tot_opening += opening_stock
+            tot_in += stock_in_qty
+            tot_out += stock_out_qty
+            tot_remaining += remaining_stock
+
+            distinct_products_all.add(prid)
+            distinct_projects_all.add(pid)
+
+            if pid in project_stats:
+                ps = project_stats[pid]
+                ps["opening_stock"] += opening_stock
+                ps["stock_in_qty"] += stock_in_qty
+                ps["stock_out_qty"] += stock_out_qty
+                ps["remaining_stock"] += remaining_stock
+                ps["distinct_products"].add(prid)
 
             items_report.append({
+                "id": f"{pid}-{prid}",
                 "project_id": p.id,
                 "project_name": p.name,
-                "project_code": p.code,
-                "location": p.location,
-                "contact_info": p.contact_info,
-                "description": p.description,
-                "status": p.status,
-                "is_active": p.is_active,
-                "created_at": p.created_at.isoformat() if p.created_at else None,
-                "opening_in": opening_in,
-                "opening_out": opening_out,
-                "opening_balance": opening_balance,
-                "period_in": period_in,
-                "period_out": period_out,
-                "period_balance": period_balance,
-                "closing_in": closing_in,
-                "closing_out": closing_out,
-                "closing_balance": closing_balance,
-                "all_time_in": all_time_in,
-                "all_time_out": all_time_out,
-                "all_time_balance": all_time_in - all_time_out,
-                "distinct_products_count": len(distinct_products),
-                "shipments_in_count": period_in_shipments,
-                "shipments_out_count": period_out_shipments,
-                "last_activity_at": last_activity.isoformat() if last_activity else None,
-                "last_inbound_at": last_inbound.isoformat() if last_inbound else None,
-                "last_outbound_at": last_outbound.isoformat() if last_outbound else None,
+                "project_code": p.code or "—",
+                "site_location": p.location or "—",
+                "project_status": p.status,
+                "product_id": prod.id,
+                "product_name": prod.name,
+                "product_code": prod.product_code or "—",
+                "category_name": cat_name,
+                "tracking_type": prod_tracking,
+                "opening_stock": opening_stock,
+                "stock_in_qty": stock_in_qty,
+                "stock_out_qty": stock_out_qty,
+                "closing_stock": remaining_stock,
+                "remaining_stock": remaining_stock,
+                "all_time_in": rec["all_time_in"],
+                "all_time_out": rec["all_time_out"],
+                "last_movement_at": rec["last_movement_at"].isoformat() if rec["last_movement_at"] else None,
             })
+
+        items_report.sort(
+            key=lambda x: (x["project_name"], x["product_name"])
+        )
+
+        projects_summary_list = []
+        for pid, ps in project_stats.items():
+            projects_summary_list.append({
+                "project_id": ps["project_id"],
+                "project_name": ps["project_name"],
+                "project_code": ps["project_code"],
+                "site_location": ps["location"],
+                "status": ps["status"],
+                "distinct_products_count": len(ps["distinct_products"]),
+                "opening_stock": ps["opening_stock"],
+                "stock_in_qty": ps["stock_in_qty"],
+                "stock_out_qty": ps["stock_out_qty"],
+                "remaining_stock": ps["remaining_stock"],
+            })
+
+        active_projects_count = sum(1 for p in projects if p.status == "active")
 
         return {
             "summary": {
-                "total_projects": len(projects),
-                "active_projects": active_count,
-                "completed_projects": completed_count,
-                "on_hold_projects": on_hold_count,
-                "total_opening_balance": tot_opening_bal,
-                "total_period_in": tot_period_in,
-                "total_period_out": tot_period_out,
-                "total_period_balance": tot_period_in - tot_period_out,
-                "total_closing_in": tot_closing_in,
-                "total_closing_out": tot_closing_out,
-                "total_closing_balance": tot_closing_bal,
-                "total_shipments_in": tot_shipments_in,
-                "total_shipments_out": tot_shipments_out,
+                "total_products": len(distinct_products_all),
+                "total_projects": len(distinct_projects_all) if clean_pid is None else 1,
+                "active_projects": active_projects_count,
+                "total_opening_stock": tot_opening,
+                "total_stock_in": tot_in,
+                "total_stock_out": tot_out,
+                "total_remaining_stock": tot_remaining,
+                "has_date_filter": has_date_filter,
             },
             "items": items_report,
+            "projects_summary": projects_summary_list,
+            "projects_list": projects_list,
         }

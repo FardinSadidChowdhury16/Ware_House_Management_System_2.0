@@ -26,17 +26,19 @@ function defaultGetStatusBadge(status) {
   return <Badge variant="warning">On Hold</Badge>;
 }
 
-export function ProjectViewModal({ project, isOpen, onClose, getStatusBadge = defaultGetStatusBadge }) {
+export function ProjectViewModal({ project, isOpen, onClose, getStatusBadge = defaultGetStatusBadge, initialSearch = "" }) {
   const [activeTab, setActiveTab] = useState("all"); // "all" | "in" | "out" | "info"
   const [itemsData, setItemsData] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(initialSearch || "");
 
   useEffect(() => {
     if (!isOpen || !project?.id) {
       setItemsData(null);
+      setSearch("");
       return;
     }
+    setSearch(initialSearch || "");
     setLoading(true);
     projectsApi.getProjectItems(project.id)
       .then((data) => setItemsData(data))

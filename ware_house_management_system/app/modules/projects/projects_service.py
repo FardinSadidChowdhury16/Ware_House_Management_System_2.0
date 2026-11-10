@@ -86,16 +86,20 @@ class ProjectService:
 
     def get_summary_report(
         self,
+        project_id: Optional[str] = None,
         date_from: Optional[str] = None,
         date_to: Optional[str] = None,
         status: Optional[str] = None,
         warehouse_id: Optional[int] = None,
         search: Optional[str] = None,
+        tracking_type: Optional[str] = None,
     ) -> dict:
         return self.repository.get_project_summary_report(
+            project_id=project_id,
             date_from=date_from,
             date_to=date_to,
             status=status,
             warehouse_id=warehouse_id,
             search=search,
+            tracking_type=tracking_type,
         )
