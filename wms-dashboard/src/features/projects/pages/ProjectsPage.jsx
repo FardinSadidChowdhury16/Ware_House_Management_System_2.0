@@ -318,17 +318,8 @@ export function ProjectsPage() {
                         {p.code}
                       </span>
                     </Td>
-                    <Td>
-                      <div>
-                        <div className="font-semibold text-slate-900 dark:text-slate-100 text-sm">
-                          {p.name}
-                        </div>
-                        {p.description && (
-                          <div className="text-xs text-slate-400 dark:text-slate-500 truncate max-w-xs">
-                            {p.description}
-                          </div>
-                        )}
-                      </div>
+                    <Td className="font-semibold text-slate-900 dark:text-slate-100 text-sm">
+                      {p.name}
                     </Td>
                     <Td>
                       <span className="inline-flex items-center gap-1.5 text-xs text-slate-700 dark:text-slate-300">
