@@ -115,6 +115,9 @@ class InventoryRepository:
         barcode=None,
         name=None,
         allowed_warehouse_ids=None,
+        customer_id=None,
+        project_id=None,
+        destination_type=None,
     ):
         """Get paginated stock movements with joined product/warehouse/supplier/customer names."""
         from app.models.product import Product, ProductVariant
@@ -246,6 +249,14 @@ class InventoryRepository:
             query = query.filter(StockMovement.product_id == product_id)
         if movement_type:
             query = query.filter(StockMovement.movement_type == movement_type)
+        if customer_id:
+            query = query.filter(StockMovement.customer_id == customer_id)
+        if project_id:
+            query = query.filter(StockMovement.project_id == project_id)
+        if destination_type == "customer":
+            query = query.filter(StockMovement.customer_id.isnot(None))
+        elif destination_type == "project":
+            query = query.filter(StockMovement.project_id.isnot(None))
         if date_from:
             d_f = None
             if isinstance(date_from, str):

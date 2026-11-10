@@ -216,6 +216,9 @@ def list_movements(
     search: Optional[str] = None,
     barcode: Optional[str] = None,
     name: Optional[str] = None,
+    customer_id: Optional[int] = None,
+    project_id: Optional[int] = None,
+    destination_type: Optional[str] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -236,6 +239,9 @@ def list_movements(
         barcode=barcode,
         name=name,
         allowed_warehouse_ids=target_wh_ids,
+        customer_id=customer_id,
+        project_id=project_id,
+        destination_type=destination_type,
     )
 
 @router.get("/sales-report", summary="Get comprehensive stock sell report with metrics, item breakdown, and orders")

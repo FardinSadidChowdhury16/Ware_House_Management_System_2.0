@@ -85,6 +85,9 @@ class InventoryController:
         barcode: Optional[str] = None,
         name: Optional[str] = None,
         allowed_warehouse_ids: Optional[List[int]] = None,
+        customer_id: Optional[int] = None,
+        project_id: Optional[int] = None,
+        destination_type: Optional[str] = None,
     ) -> PaginatedMovementsResponse:
         service = InventoryService(db)
         
@@ -125,6 +128,9 @@ class InventoryController:
             barcode=barcode,
             name=name,
             allowed_warehouse_ids=allowed_warehouse_ids,
+            customer_id=customer_id,
+            project_id=project_id,
+            destination_type=destination_type,
         )
         import math
         total_pages = math.ceil(total / page_size) if total > 0 else 1

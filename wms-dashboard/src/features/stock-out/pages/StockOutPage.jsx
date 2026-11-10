@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { 
   Toolbar, SearchBox, DateRangeFilter, FilterChips, Select, PrimaryButton,
   Card, Th, Td, Pagination, EmptyTable, Badge, Modal, TextInput, useToast, GhostButton,
@@ -944,6 +944,7 @@ export function StockOutPage() {
   const [localWarehouseId, setLocalWarehouseId] = useState(
     selectedWarehouseId ? String(selectedWarehouseId) : "all"
   );
+  const [destinationFilter, setDestinationFilter] = useState("all");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [viewingMovement, setViewingMovement] = useState(null);
 
@@ -953,6 +954,20 @@ export function StockOutPage() {
     }
   }, [selectedWarehouseId]);
 
+  let filterCustomerId = undefined;
+  let filterProjectId = undefined;
+  let filterDestinationType = undefined;
+
+  if (destinationFilter === "type:project") {
+    filterDestinationType = "project";
+  } else if (destinationFilter === "type:customer") {
+    filterDestinationType = "customer";
+  } else if (destinationFilter.startsWith("project:")) {
+    filterProjectId = Number(destinationFilter.split(":")[1]);
+  } else if (destinationFilter.startsWith("customer:")) {
+    filterCustomerId = Number(destinationFilter.split(":")[1]);
+  }
+
   const queryParams = {
     page,
     page_size: 10,
@@ -960,6 +975,9 @@ export function StockOutPage() {
     warehouse_id: localWarehouseId !== "all" && localWarehouseId ? Number(localWarehouseId) : undefined,
     date_from: fromDate || undefined,
     date_to: toDate || undefined,
+    customer_id: filterCustomerId,
+    project_id: filterProjectId,
+    destination_type: filterDestinationType,
   };
 
   const {
@@ -971,6 +989,38 @@ export function StockOutPage() {
     customers,
     projects,
   } = useStockOut(queryParams);
+
+  const destinationOptions = useMemo(() => {
+    const list = [
+      { value: "all", label: "All Destinations (Customer & Project)" },
+      { value: "type:project", label: "📁 All Projects", group: "Categories" },
+      { value: "type:customer", label: "👤 All Customers", group: "Categories" },
+    ];
+
+    if (projects && projects.length > 0) {
+      projects.forEach((p) => {
+        list.push({
+          value: `project:${p.id}`,
+          label: `📁 ${p.name}${p.code ? ` (${p.code})` : ""}`,
+          group: "Projects",
+        });
+      });
+    }
+
+    if (customers && customers.length > 0) {
+      customers
+        .filter((c) => c.status !== false)
+        .forEach((c) => {
+          list.push({
+            value: `customer:${c.id}`,
+            label: `👤 ${c.name}${c.phone ? ` (${c.phone})` : ""}`,
+            group: "Customers",
+          });
+        });
+    }
+
+    return list;
+  }, [projects, customers]);
 
   return (
     <div>
@@ -1034,6 +1084,16 @@ export function StockOutPage() {
           className="min-w-36 w-auto text-xs py-1.5"
           placeholder="All Warehouses"
         />
+        <Select
+          value={destinationFilter}
+          onChange={(val) => {
+            setDestinationFilter(val);
+            setPage(1);
+          }}
+          options={destinationOptions}
+          className="min-w-44 w-auto text-xs py-1.5"
+          placeholder="All Destinations (Customer / Project)"
+        />
         <DateRangeFilter
           fromDate={fromDate}
           toDate={toDate}
@@ -1041,6 +1101,52 @@ export function StockOutPage() {
           onToDateChange={(value) => { setToDate(value); setPage(1); }}
         />
       </Toolbar>
+
+      {/* Quick Destination Filter Chips */}
+      <div className="flex items-center gap-2 mb-3 mt-1 overflow-x-auto pb-0.5">
+        <FilterChips
+          value={
+            destinationFilter === "all"
+              ? "all"
+              : destinationFilter === "type:project" || destinationFilter.startsWith("project:")
+              ? "project"
+              : "customer"
+          }
+          onChange={(val) => {
+            if (val === "all") setDestinationFilter("all");
+            else if (val === "project") setDestinationFilter("type:project");
+            else if (val === "customer") setDestinationFilter("type:customer");
+            setPage(1);
+          }}
+          options={[
+            { label: "All Movements", value: "all" },
+            { label: "📁 Project Dispatches", value: "project" },
+            { label: "👤 Customer Sales", value: "customer" },
+          ]}
+        />
+
+        {destinationFilter !== "all" && (
+          <span className="inline-flex items-center gap-1.5 text-xs bg-slate-100 text-slate-700 px-2.5 py-1 rounded-full border border-slate-200">
+            <span>
+              Filtered:{" "}
+              <strong>
+                {destinationOptions.find((o) => o.value === destinationFilter)?.label || destinationFilter}
+              </strong>
+            </span>
+            <button
+              type="button"
+              onClick={() => {
+                setDestinationFilter("all");
+                setPage(1);
+              }}
+              className="text-slate-400 hover:text-slate-700 font-bold ml-1 cursor-pointer"
+              title="Clear destination filter"
+            >
+              ×
+            </button>
+          </span>
+        )}
+      </div>
 
       {/* Main Table Card */}
       <Card>
