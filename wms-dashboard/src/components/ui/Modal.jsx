@@ -1,8 +1,9 @@
 import { X } from "lucide-react";
 import { Card } from "./Card.jsx";
 
-export function Modal({ isOpen = true, title, onClose, children, footer, size = "lg", className = "" }) {
-  if (!isOpen) return null;
+export function Modal({ isOpen, open, title, onClose, children, footer, size = "lg", className = "" }) {
+  const isVisible = open !== undefined ? open : isOpen !== undefined ? isOpen : true;
+  if (!isVisible) return null;
 
   const sizeClasses = {
     sm: "max-w-sm",

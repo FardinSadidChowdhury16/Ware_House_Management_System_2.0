@@ -399,102 +399,123 @@ export function ProjectsPage() {
       </Card>
 
       {/* Create / Edit Project Modal */}
-      <Modal
-        open={showModal}
-        onClose={() => setShowModal(false)}
-        title={editingProject ? "Edit Project" : "Create New Project"}
-        size="lg"
-      >
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {formError && (
-            <div className="p-3 rounded-lg bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-xs text-rose-700 dark:text-rose-300">
-              {formError}
+      {showModal && (
+        <Modal
+          isOpen={showModal}
+          onClose={() => setShowModal(false)}
+          title={editingProject ? "Edit Project" : "Create New Project"}
+          size="lg"
+        >
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {formError && (
+              <div className="p-3 rounded-lg bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-xs text-rose-700 dark:text-rose-300">
+                {formError}
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Field label="Project Name *" required>
+                <TextInput
+                  placeholder="e.g. Metro Rail Line-6"
+                  value={form.name}
+                  onChange={(v) => {
+                    const val = typeof v === "string" ? v : v?.target?.value ?? "";
+                    setForm((prev) => ({ ...prev, name: val }));
+                    if (formError) setFormError("");
+                  }}
+                  required
+                />
+              </Field>
+
+              <Field label="Project Code *" required hint="Unique identifier code">
+                <TextInput
+                  placeholder="e.g. PRJ-MRT-06"
+                  value={form.code}
+                  onChange={(v) => {
+                    const val = typeof v === "string" ? v : v?.target?.value ?? "";
+                    setForm((prev) => ({ ...prev, code: val.toUpperCase() }));
+                    if (formError) setFormError("");
+                  }}
+                  required
+                />
+              </Field>
             </div>
-          )}
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Field label="Project Name *" required>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Field label="Location *" required hint="Site location, district or city">
+                <TextInput
+                  placeholder="e.g. Uttara Depot, Dhaka"
+                  value={form.location}
+                  onChange={(v) => {
+                    const val = typeof v === "string" ? v : v?.target?.value ?? "";
+                    setForm((prev) => ({ ...prev, location: val }));
+                    if (formError) setFormError("");
+                  }}
+                  required
+                />
+              </Field>
+
+              <Field label="Status">
+                <Select
+                  value={form.status}
+                  onChange={(v) => setForm((prev) => ({ ...prev, status: v }))}
+                  options={[
+                    { label: "Active", value: "active" },
+                    { label: "On Hold", value: "on_hold" },
+                    { label: "Completed", value: "completed" },
+                  ]}
+                />
+              </Field>
+            </div>
+
+            <Field label="Contact Info *" required hint="Person name, phone number, and email">
               <TextInput
-                placeholder="e.g. Metro Rail Line-6"
-                value={form.name}
-                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                placeholder="e.g. Engr. Tanvir Ahmed (Project Director) - 01711-XXXXXX, tanvir@metrorail.gov.bd"
+                value={form.contact_info}
+                onChange={(v) => {
+                  const val = typeof v === "string" ? v : v?.target?.value ?? "";
+                  setForm((prev) => ({ ...prev, contact_info: val }));
+                  if (formError) setFormError("");
+                }}
                 required
               />
             </Field>
 
-            <Field label="Project Code *" required hint="Unique identifier code">
-              <TextInput
-                placeholder="e.g. PRJ-MRT-06"
-                value={form.code}
-                onChange={(e) => setForm({ ...form, code: e.target.value.toUpperCase() })}
-                required
-              />
-            </Field>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Field label="Location *" required hint="Site location, district or city">
-              <TextInput
-                placeholder="e.g. Uttara Depot, Dhaka"
-                value={form.location}
-                onChange={(e) => setForm({ ...form, location: e.target.value })}
-                required
+            <Field label="Project Description / Notes">
+              <textarea
+                rows={3}
+                placeholder="Optional overview, milestone targets, or warehouse delivery instructions..."
+                value={form.description}
+                onChange={(e) => {
+                  const val = typeof e === "string" ? e : e?.target?.value ?? "";
+                  setForm((prev) => ({ ...prev, description: val }));
+                }}
+                className="w-full text-xs p-2.5 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-blue-500"
               />
             </Field>
 
-            <Field label="Status">
-              <Select
-                value={form.status}
-                onChange={(v) => setForm({ ...form, status: v })}
-                options={[
-                  { label: "Active", value: "active" },
-                  { label: "On Hold", value: "on_hold" },
-                  { label: "Completed", value: "completed" },
-                ]}
-              />
-            </Field>
-          </div>
-
-          <Field label="Contact Info *" required hint="Person name, phone number, and email">
-            <TextInput
-              placeholder="e.g. Engr. Tanvir Ahmed (Project Director) - 01711-XXXXXX, tanvir@metrorail.gov.bd"
-              value={form.contact_info}
-              onChange={(e) => setForm({ ...form, contact_info: e.target.value })}
-              required
-            />
-          </Field>
-
-          <Field label="Project Description / Notes">
-            <textarea
-              rows={3}
-              placeholder="Optional overview, milestone targets, or warehouse delivery instructions..."
-              value={form.description}
-              onChange={(e) => setForm({ ...form, description: e.target.value })}
-              className="w-full text-xs p-2.5 rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:outline-none focus:ring-1 focus:ring-blue-500"
-            />
-          </Field>
-
-          <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
-            <GhostButton type="button" onClick={() => setShowModal(false)}>
-              Cancel
-            </GhostButton>
-            <PrimaryButton type="submit" disabled={isCreating || isUpdating}>
-              {editingProject
-                ? isUpdating
-                  ? "Saving..."
-                  : "Update Project"
-                : isCreating
-                ? "Creating..."
-                : "Create Project"}
-            </PrimaryButton>
-          </div>
-        </form>
-      </Modal>
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+              <GhostButton type="button" onClick={() => setShowModal(false)}>
+                Cancel
+              </GhostButton>
+              <PrimaryButton type="submit" disabled={isCreating || isUpdating}>
+                {editingProject
+                  ? isUpdating
+                    ? "Saving..."
+                    : "Update Project"
+                  : isCreating
+                  ? "Creating..."
+                  : "Create Project"}
+              </PrimaryButton>
+            </div>
+          </form>
+        </Modal>
+      )}
 
       {/* Project Details Modal */}
       {viewingProject && (
         <Modal
-          open={!!viewingProject}
+          isOpen={!!viewingProject}
           onClose={() => setViewingProject(null)}
           title={
             <div className="flex items-center gap-2">
