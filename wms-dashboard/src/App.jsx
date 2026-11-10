@@ -30,6 +30,8 @@ const NO_SECTION_HEADER_SECTIONS = [
   "warehouses",
   "suppliers",
   "customers",
+  "projects",
+  "project_reports",
 ];
 
 export default function WMSAdminDashboard({

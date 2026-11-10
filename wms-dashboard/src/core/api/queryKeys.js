@@ -47,5 +47,11 @@ export const queryKeys = {
     list: (params) => ["approvals", "list", params],
     stats: ["approvals", "stats"],
   },
+  projects: {
+    all: ["projects"],
+    list: (params) => ["projects", "list", params],
+    stats: ["projects", "stats"],
+    detail: (id) => ["projects", "detail", id],
+  },
 };
 

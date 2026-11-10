@@ -2,6 +2,7 @@ from app.core.database import Base
 from app.models.access_control import User, Role, Permission, role_permissions
 from app.models.warehouse import Warehouse, user_warehouses
 from app.models.party import Customer, Supplier
+from app.models.project import Project
 from app.models.approval import StockApproval, ApprovalOperationType, ApprovalStatus
 from app.models.product import (
     ProductType,
@@ -55,4 +56,5 @@ __all__ = [
     "BulkStockLog",
     "ServiceTicket",
     "ServiceTicketStatus",
+    "Project",
 ]

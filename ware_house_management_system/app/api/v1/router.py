@@ -12,6 +12,7 @@ from app.modules.inventory.inventory_route import router as inventory_router
 from app.modules.services.services_route import router as services_router
 from app.modules.approvals.approvals_route import router as approvals_router
 from app.modules.uploads.uploads_route import router as uploads_router
+from app.modules.projects.projects_route import router as projects_router
 
 api_router = APIRouter()
 
@@ -26,4 +27,5 @@ api_router.include_router(product_variants_router)
 api_router.include_router(inventory_router, prefix="/inventory", tags=["Inventory Management"])
 api_router.include_router(services_router, prefix="/services", tags=["Warranty & Service Management"])
 api_router.include_router(approvals_router, prefix="/approvals", tags=["Approvals"])
+api_router.include_router(projects_router, prefix="/projects", tags=["Project Management"])
 api_router.include_router(uploads_router)

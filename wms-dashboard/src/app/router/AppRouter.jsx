@@ -18,6 +18,8 @@ import { TrackingPage } from "../../features/tracking/pages/TrackingPage.jsx";
 import { ReturnsPage } from "../../features/returns/pages/ReturnsPage.jsx";
 import { WarrantyPage } from "../../features/warranty/pages/WarrantyPage.jsx";
 import { ReportsPage } from "../../features/reports/pages/ReportsPage.jsx";
+import { ProjectsPage } from "../../features/projects/pages/ProjectsPage.jsx";
+import { ProjectReportsPage } from "../../features/projects/pages/ProjectReportsPage.jsx";
 import { SettingsPage } from "../../features/settings/pages/SettingsPage.jsx";
 import { ConfirmationProvider } from "../../components/ui/ConfirmationContext.jsx";
 
@@ -56,6 +58,8 @@ export function AppRouter() {
           <Route path="reports/low-stock" element={<PermissionRoute permission="report_read"><ReportsPage initialReport="low_stock_report" /></PermissionRoute>} />
           <Route path="reports/stock-sell" element={<PermissionRoute permission="report_read"><ReportsPage initialReport="stock_sell_report" /></PermissionRoute>} />
           <Route path="reports/servicing" element={<PermissionRoute permission="report_read"><ReportsPage initialReport="servicing_report" /></PermissionRoute>} />
+          <Route path="projects" element={<PermissionRoute permission="project_read"><ProjectsPage /></PermissionRoute>} />
+          <Route path="projects/reports" element={<PermissionRoute permission="project_read"><ProjectReportsPage /></PermissionRoute>} />
           <Route path="settings" element={<PermissionRoute permission="tax_read"><SettingsPage /></PermissionRoute>} />
         </Route>
 

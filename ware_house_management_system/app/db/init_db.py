@@ -49,6 +49,10 @@ def init_db(db: Session) -> None:
         ("tax_read", "Settings"),
         ("tax_write", "Settings"),
 
+        # Projects
+        ("project_read", "Projects"),
+        ("project_write", "Projects"),
+
         # Read-only / Monitor Modules
         ("inventory_read", "Inventory"),
         ("tracking_read", "Tracking"),

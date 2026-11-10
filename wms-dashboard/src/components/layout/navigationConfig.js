@@ -20,6 +20,7 @@ import {
   Boxes,
   AlertTriangle,
   TrendingDown,
+  FolderKanban,
 } from "lucide-react";
 
 export const SECTION_PATHS = {
@@ -44,6 +45,8 @@ export const SECTION_PATHS = {
   report_low_stock: "/reports/low-stock",
   report_stock_sell: "/reports/stock-sell",
   report_servicing: "/reports/servicing",
+  projects: "/projects",
+  project_reports: "/projects/reports",
   settings: "/settings",
 };
 
@@ -87,6 +90,14 @@ export const NAV = [
       { id: "report_low_stock", label: "Low Stock Report", icon: AlertTriangle, path: SECTION_PATHS.report_low_stock, permission: "report_read" },
       { id: "report_stock_sell", label: "Stock Sell Report", icon: TrendingDown, path: SECTION_PATHS.report_stock_sell, permission: "report_read" },
       { id: "report_servicing", label: "Servicing Report", icon: Wrench, path: SECTION_PATHS.report_servicing, permission: "report_read" },
+    ],
+  },
+  {
+    title: "Projects",
+    icon: FolderKanban,
+    items: [
+      { id: "projects", label: "Projects", icon: FolderKanban, path: SECTION_PATHS.projects, permission: "project_read" },
+      { id: "project_reports", label: "Reports", icon: FileBarChart, path: SECTION_PATHS.project_reports, permission: "project_read" },
     ],
   },
   {
@@ -170,6 +181,8 @@ export const LABELS = {
   report_low_stock: "Low Stock Report",
   report_stock_sell: "Stock Sell Report",
   report_servicing: "Servicing Report",
+  projects: "Projects",
+  project_reports: "Project Reports",
   settings: "Tax Rules",
 };
 
@@ -194,5 +207,7 @@ export const DESCRIPTIONS = {
   report_low_stock: "Critical shortage items below minimum required safety stock levels.",
   report_stock_sell: "Customer sales dispatches, delivery references, and sold quantities.",
   report_servicing: "Service tickets received, in repair, finished, and delivered for a date range.",
+  projects: "Create new projects, track site locations, codes, and contact info.",
+  project_reports: "View analytics, progress, and stock distribution per project.",
   settings: "Create and manage tax rules to assign to products.",
 };
