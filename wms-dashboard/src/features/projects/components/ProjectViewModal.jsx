@@ -212,7 +212,7 @@ export function ProjectViewModal({ project, isOpen, onClose, getStatusBadge = de
               </div>
               <div className="p-3 bg-purple-50/70 dark:bg-purple-950/20 border border-purple-200 dark:border-purple-900/40 rounded-lg">
                 <span className="text-[11px] font-medium text-purple-600 dark:text-purple-400 uppercase tracking-wide block">
-                  Remaining WH Balance
+                  Remaining
                 </span>
                 <span className="text-xl font-bold text-purple-900 dark:text-purple-100 font-mono">
                   {loading ? "..." : netBalance}

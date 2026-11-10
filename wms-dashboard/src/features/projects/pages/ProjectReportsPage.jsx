@@ -136,7 +136,7 @@ export function ProjectReportsPage() {
           tint="amber"
         />
         <StatCard
-          label={dateTo ? "Warehouse Balance (Remaining)" : "Current In-Stock Balance"}
+          label="Remaining"
           value={isLoading ? "..." : summaryStats.total_closing_balance ?? 0}
           icon={Boxes}
           tint="purple"
@@ -190,7 +190,7 @@ export function ProjectReportsPage() {
               { label: "Opening Balance", key: "opening_balance" },
               { label: "Period Stock In (+)", key: "period_in" },
               { label: "Period Stock Out (-)", key: "period_out" },
-              { label: "Remaining Balance", key: "closing_balance" },
+              { label: "Remaining", key: "closing_balance" },
               { label: "All-Time In", key: "all_time_in" },
               { label: "All-Time Out", key: "all_time_out" },
               { label: "Distinct Products", key: "distinct_products_count" },
@@ -253,7 +253,7 @@ export function ProjectReportsPage() {
                 <Th className="text-right">Opening Bal</Th>
                 <Th className="text-right">Stock In (+)</Th>
                 <Th className="text-right">Stock Out (-)</Th>
-                <Th className="text-right">Remaining Bal</Th>
+                <Th className="text-right">Remaining</Th>
                 <Th className="text-center">Activity In / Out</Th>
                 <Th>Last Activity</Th>
                 <Th className="text-right">Action</Th>
