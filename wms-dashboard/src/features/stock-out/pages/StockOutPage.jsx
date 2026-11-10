@@ -941,17 +941,12 @@ export function StockOutPage() {
   const [search, setSearch] = useState("");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
-  const [localWarehouseId, setLocalWarehouseId] = useState(
-    selectedWarehouseId ? String(selectedWarehouseId) : "all"
-  );
   const [destinationFilter, setDestinationFilter] = useState("all");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [viewingMovement, setViewingMovement] = useState(null);
 
   useEffect(() => {
-    if (selectedWarehouseId) {
-      setLocalWarehouseId(String(selectedWarehouseId));
-    }
+    setPage(1);
   }, [selectedWarehouseId]);
 
   const destinationFilterOptions = [
@@ -964,7 +959,7 @@ export function StockOutPage() {
     page,
     page_size: 10,
     search: search.trim() || undefined,
-    warehouse_id: localWarehouseId !== "all" && localWarehouseId ? Number(localWarehouseId) : undefined,
+    warehouse_id: selectedWarehouseId && selectedWarehouseId !== "all" ? Number(selectedWarehouseId) : undefined,
     date_from: fromDate || undefined,
     date_to: toDate || undefined,
     destination_type: destinationFilter !== "all" ? destinationFilter : undefined,
@@ -1026,29 +1021,14 @@ export function StockOutPage() {
           }} 
           className="min-w-[180px] max-w-xs shrink-0"
         />
-        <FilterChips
+        <Select
           value={destinationFilter}
           onChange={(val) => {
             setDestinationFilter(val);
             setPage(1);
           }}
           options={destinationFilterOptions}
-        />
-        <Select
-          value={localWarehouseId}
-          onChange={(val) => {
-            setLocalWarehouseId(val);
-            setPage(1);
-          }}
-          options={[
-            { value: "all", label: "All Warehouses" },
-            ...(warehouses && warehouses.length > 0 ? warehouses : (myWarehouses || [])).map((w) => ({
-              value: String(w.id),
-              label: `${w.name}${w.code ? ` (${w.code})` : ""}`,
-            })),
-          ]}
           className="min-w-36 w-auto text-xs py-1.5"
-          placeholder="All Warehouses"
         />
         <DateRangeFilter
           fromDate={fromDate}
