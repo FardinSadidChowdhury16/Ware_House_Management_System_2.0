@@ -3,11 +3,15 @@ import {
   FolderKanban,
   Package,
   TrendingUp,
+  TrendingDown,
   Boxes,
   MapPin,
   Calendar,
   Eye,
   Clock,
+  ArrowDownLeft,
+  ArrowUpRight,
+  Scale,
 } from "lucide-react";
 import {
   Badge,
@@ -77,10 +81,15 @@ export function ProjectReportsPage() {
           active_projects: 0,
           completed_projects: 0,
           on_hold_projects: 0,
-          total_opening_units: 0,
-          total_period_units: 0,
-          total_cumulative_units: 0,
-          total_shipments: 0,
+          total_opening_balance: 0,
+          total_period_in: 0,
+          total_period_out: 0,
+          total_period_balance: 0,
+          total_closing_in: 0,
+          total_closing_out: 0,
+          total_closing_balance: 0,
+          total_shipments_in: 0,
+          total_shipments_out: 0,
         },
         items: [],
       });
@@ -115,20 +124,20 @@ export function ProjectReportsPage() {
           tint="blue"
         />
         <StatCard
-          label={dateFrom ? "Opening Dispatched (Prior)" : "Opening Dispatched"}
-          value={isLoading ? "..." : summaryStats.total_opening_units ?? 0}
-          icon={Package}
-          tint="indigo"
-        />
-        <StatCard
-          label="Period Dispatched (+)"
-          value={isLoading ? "..." : summaryStats.total_period_units ?? 0}
-          icon={TrendingUp}
+          label={dateFrom ? "Stock In Received (+)" : "Total Stock In (+)"}
+          value={isLoading ? "..." : (dateFrom ? summaryStats.total_period_in : summaryStats.total_closing_in) ?? 0}
+          icon={ArrowDownLeft}
           tint="emerald"
         />
         <StatCard
-          label={dateTo ? "Cumulative Dispatched Units" : "Total Dispatched Units"}
-          value={isLoading ? "..." : summaryStats.total_cumulative_units ?? 0}
+          label={dateFrom ? "Stock Out Dispatched (-)" : "Total Stock Out (-)"}
+          value={isLoading ? "..." : (dateFrom ? summaryStats.total_period_out : summaryStats.total_closing_out) ?? 0}
+          icon={ArrowUpRight}
+          tint="amber"
+        />
+        <StatCard
+          label={dateTo ? "Warehouse Balance (Remaining)" : "Current In-Stock Balance"}
+          value={isLoading ? "..." : summaryStats.total_closing_balance ?? 0}
           icon={Boxes}
           tint="purple"
         />
@@ -136,7 +145,7 @@ export function ProjectReportsPage() {
           label="Active Job Sites"
           value={isLoading ? "..." : summaryStats.active_projects ?? 0}
           icon={MapPin}
-          tint="amber"
+          tint="indigo"
         />
       </div>
 
@@ -146,9 +155,9 @@ export function ProjectReportsPage() {
           <div className="flex items-center gap-2">
             <Calendar size={15} className="shrink-0 text-indigo-600 dark:text-indigo-400" />
             <span>
-              Cumulative Project Period: <strong>{dateFrom ? formatBDDate(dateFrom) : "Beginning of time"}</strong> to <strong>{dateTo ? formatBDDate(dateTo) : "Present"}</strong>
+              Cumulative Project Balance Period: <strong>{dateFrom ? formatBDDate(dateFrom) : "Beginning of time"}</strong> to <strong>{dateTo ? formatBDDate(dateTo) : "Present"}</strong>
               <span className="text-slate-500 dark:text-slate-400 ml-1.5 font-normal">
-                (Formula: Opening Units + Period Dispatches = Cumulative Dispatched Units)
+                (Formula: Opening Balance + Period Inbound - Period Outbound = Closing Remaining Balance)
               </span>
             </span>
           </div>
@@ -170,7 +179,7 @@ export function ProjectReportsPage() {
       <Toolbar
         action={
           <ExportCSVButton
-            filename="Projects_Summary_Report"
+            filename="Projects_Stock_Report"
             data={allItems}
             columns={[
               { label: "Project Code", key: "project_code" },
@@ -178,14 +187,18 @@ export function ProjectReportsPage() {
               { label: "Site Location", key: "location" },
               { label: "Contact Info", key: "contact_info" },
               { label: "Status", key: "status" },
-              { label: "Opening Units", key: "opening_units" },
-              { label: "Period Dispatched", key: "period_units" },
-              { label: "Cumulative Units", key: "closing_units" },
+              { label: "Opening Balance", key: "opening_balance" },
+              { label: "Period Stock In (+)", key: "period_in" },
+              { label: "Period Stock Out (-)", key: "period_out" },
+              { label: "Remaining Balance", key: "closing_balance" },
+              { label: "All-Time In", key: "all_time_in" },
+              { label: "All-Time Out", key: "all_time_out" },
               { label: "Distinct Products", key: "distinct_products_count" },
-              { label: "Shipments Count", key: "shipments_count" },
+              { label: "Inbound Batches", key: "shipments_in_count" },
+              { label: "Outbound Dispatches", key: "shipments_out_count" },
               {
-                label: "Last Dispatched At",
-                value: (p) => (p.last_dispatched_at ? formatBDDateTime(p.last_dispatched_at) : "Never"),
+                label: "Last Activity",
+                value: (p) => (p.last_activity_at ? formatBDDateTime(p.last_activity_at) : "Never"),
               },
             ]}
           />
@@ -237,18 +250,19 @@ export function ProjectReportsPage() {
                 <Th>Project Name &amp; Code</Th>
                 <Th>Site Location</Th>
                 <Th>Status</Th>
-                <Th className="text-right">Opening (Prior)</Th>
-                <Th className="text-right">Period Dispatched</Th>
-                <Th className="text-right">Cumulative Units</Th>
-                <Th className="text-center">Products / Shipments</Th>
-                <Th>Last Dispatched</Th>
+                <Th className="text-right">Opening Bal</Th>
+                <Th className="text-right">Stock In (+)</Th>
+                <Th className="text-right">Stock Out (-)</Th>
+                <Th className="text-right">Remaining Bal</Th>
+                <Th className="text-center">Activity In / Out</Th>
+                <Th>Last Activity</Th>
                 <Th className="text-right">Action</Th>
               </tr>
             </thead>
             <tbody>
               {isLoading ? (
                 <tr>
-                  <td colSpan={10} className="text-center py-10 text-sm text-slate-400">
+                  <td colSpan={11} className="text-center py-10 text-sm text-slate-400">
                     <div className="inline-flex items-center gap-2">
                       <Clock className="animate-spin text-blue-500" size={16} />
                       <span>Loading projects summary report...</span>
@@ -256,10 +270,13 @@ export function ProjectReportsPage() {
                   </td>
                 </tr>
               ) : allItems.length === 0 ? (
-                <EmptyTable cols={10} message="No project summary records found." />
+                <EmptyTable cols={11} message="No project summary records found." />
               ) : (
                 pagedItems.map((item, idx) => {
                   const rowNumber = (page - 1) * PAGE_SIZE + idx + 1;
+                  const balancePositive = (item.closing_balance ?? 0) > 0;
+                  const balanceNegative = (item.closing_balance ?? 0) < 0;
+
                   return (
                     <tr
                       key={item.project_id || idx}
@@ -281,53 +298,86 @@ export function ProjectReportsPage() {
                       <Td>
                         <div className="flex items-center gap-1.5 text-xs text-slate-700 dark:text-slate-300">
                           <MapPin size={13} className="shrink-0 text-slate-400" />
-                          <span className="truncate max-w-[180px]">{item.location || "—"}</span>
+                          <span className="truncate max-w-[170px]">{item.location || "—"}</span>
                         </div>
                       </Td>
                       <Td>{getStatusBadge(item.status)}</Td>
+                      
+                      {/* Opening Balance */}
                       <Td className="text-right">
                         <span className="font-mono text-xs font-semibold text-slate-600 dark:text-slate-300">
-                          {item.opening_units}
+                          {item.opening_balance ?? 0}
                         </span>
                       </Td>
+
+                      {/* Stock In (+) */}
                       <Td className="text-right">
                         <span
                           className={`font-mono text-xs font-bold px-2 py-0.5 rounded-full ${
-                            item.period_units > 0
+                            (item.period_in ?? 0) > 0
                               ? "bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300"
                               : "text-slate-400"
                           }`}
                         >
-                          {item.period_units > 0 ? `+${item.period_units}` : "0"}
+                          {(item.period_in ?? 0) > 0 ? `+${item.period_in}` : "0"}
                         </span>
                       </Td>
+
+                      {/* Stock Out (-) */}
                       <Td className="text-right">
-                        <span className="font-mono text-xs font-bold px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-200 dark:bg-purple-950/40 dark:text-purple-300">
-                          {item.closing_units}
+                        <span
+                          className={`font-mono text-xs font-bold px-2 py-0.5 rounded-full ${
+                            (item.period_out ?? 0) > 0
+                              ? "bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/40 dark:text-amber-300"
+                              : "text-slate-400"
+                          }`}
+                        >
+                          {(item.period_out ?? 0) > 0 ? `-${item.period_out}` : "0"}
                         </span>
                       </Td>
+
+                      {/* Remaining Balance (= In - Out) */}
+                      <Td className="text-right">
+                        <span
+                          className={`font-mono text-xs font-bold px-2.5 py-0.5 rounded-full border ${
+                            balancePositive
+                              ? "bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/40 dark:text-purple-300"
+                              : balanceNegative
+                              ? "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300"
+                              : "bg-slate-100 text-slate-600 border-slate-200 dark:bg-slate-800 dark:text-slate-300"
+                          }`}
+                        >
+                          {item.closing_balance ?? 0}
+                        </span>
+                      </Td>
+
+                      {/* In / Out Shipments */}
                       <Td className="text-center">
                         <div className="inline-flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400">
-                          <span className="font-semibold text-slate-800 dark:text-slate-200">
-                            {item.distinct_products_count}
+                          <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                            +{item.shipments_in_count ?? 0}
                           </span>
-                          <span>prod</span>
+                          <span>in</span>
                           <span className="text-slate-300 dark:text-slate-600">•</span>
-                          <span className="font-semibold text-slate-800 dark:text-slate-200">
-                            {item.shipments_count}
+                          <span className="font-semibold text-amber-600 dark:text-amber-400">
+                            -{item.shipments_out_count ?? 0}
                           </span>
-                          <span>dispatches</span>
+                          <span>out</span>
                         </div>
                       </Td>
+
+                      {/* Last Activity */}
                       <Td>
-                        {item.last_dispatched_at ? (
+                        {item.last_activity_at ? (
                           <span className="text-xs font-mono text-slate-600 dark:text-slate-400">
-                            {formatBDDate(item.last_dispatched_at)}
+                            {formatBDDate(item.last_activity_at)}
                           </span>
                         ) : (
                           <span className="text-xs text-slate-400 italic">Never</span>
                         )}
                       </Td>
+
+                      {/* Action */}
                       <Td className="text-right">
                         <button
                           type="button"

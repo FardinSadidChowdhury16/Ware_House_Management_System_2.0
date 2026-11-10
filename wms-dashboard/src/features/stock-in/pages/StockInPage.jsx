@@ -8,6 +8,7 @@ import { useWarehouseFilter } from "../../../app/context/WarehouseFilterContext.
 import { Field } from "../../../components/ui/Field.jsx";
 import { useStockIn } from "../hooks/useStockIn.js";
 import { stockInApi } from "../api/stockInApi.js";
+import { projectsApi } from "../../projects/api/projectsApi.js";
 import { 
   Plus, Trash2, Check, Eye,
   Info, ScanLine, AlertCircle, Clock, Paperclip
@@ -93,10 +94,18 @@ function NewStockInModal({ isOpen, onClose, onSuccess, warehouses, suppliers, de
   
   const [warehouseId, setWarehouseId] = useState("");
   const [supplierId, setSupplierId] = useState("");
+  const [projectId, setProjectId] = useState("");
+  const [projects, setProjects] = useState([]);
   const [referenceNumber, setReferenceNumber] = useState("");
   const [note, setNote] = useState("");
   const [attachmentUrl, setAttachmentUrl] = useState("");
   const [showSupplierDetail, setShowSupplierDetail] = useState(false);
+
+  useEffect(() => {
+    projectsApi.listProjects()
+      .then((res) => setProjects(res?.items || []))
+      .catch((err) => console.error("Failed to load projects", err));
+  }, []);
   
   const [items, setItems] = useState([
     {
@@ -327,6 +336,7 @@ function NewStockInModal({ isOpen, onClose, onSuccess, warehouses, suppliers, de
       await createStockIn({
         warehouse_id: Number(warehouseId),
         supplier_id: supplierId ? Number(supplierId) : undefined,
+        project_id: projectId ? Number(projectId) : undefined,
         reference_number: referenceNumber.trim() || undefined,
         note: note.trim() || undefined,
         attachment_url: attachmentUrl || undefined,
@@ -412,6 +422,20 @@ function NewStockInModal({ isOpen, onClose, onSuccess, warehouses, suppliers, de
                 )}
               </div>
             </Field>
+            <Field label="Project Allocation (Optional)">
+              <Select 
+                value={projectId} 
+                onChange={setProjectId}
+                options={[
+                  { label: "None (General Stock)", value: "" },
+                  ...projects.map(p => ({
+                    label: `${p.name} (${p.code})`,
+                    value: String(p.id),
+                  }))
+                ]}
+                placeholder="Select Project (Optional)"
+              />
+            </Field>
             <Field label="Reference # (e.g. PO / Challan)">
               <TextInput 
                 value={referenceNumber} 
@@ -419,13 +443,15 @@ function NewStockInModal({ isOpen, onClose, onSuccess, warehouses, suppliers, de
                 placeholder="PO-2026-001"
               />
             </Field>
-            <Field label="Notes / Remarks">
-              <TextInput 
-                value={note} 
-                onChange={setNote}
-                placeholder="Received via transport shipment..."
-              />
-            </Field>
+            <div className="col-span-1 md:col-span-2">
+              <Field label="Notes / Remarks">
+                <TextInput 
+                  value={note} 
+                  onChange={setNote}
+                  placeholder="Received via transport shipment..."
+                />
+              </Field>
+            </div>
 
             <div className="col-span-1 md:col-span-2 pt-2 border-t border-slate-200/80">
               <FileUploadField
@@ -750,7 +776,12 @@ export function StockInPage() {
                       {m.to_warehouse_name || (m.to_warehouse_id ? `WH #${m.to_warehouse_id}` : "—")}
                     </Td>
                     <Td className="text-xs text-slate-600">
-                      {m.supplier_name || "—"}
+                      <div>{m.supplier_name || "—"}</div>
+                      {m.project_name && (
+                        <span className="inline-flex items-center gap-1 mt-0.5 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                          Proj: {m.project_name}
+                        </span>
+                      )}
                     </Td>
                     <Td className="text-right">
                       <div className="flex items-center justify-end gap-1.5">

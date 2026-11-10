@@ -206,6 +206,7 @@ class InventoryService:
                         barcode=clean_sn,
                         status=ItemStatus.IN_STOCK,
                         supplier_id=data.supplier_id,
+                        project_id=data.project_id,
                         warranty_start=item.warranty_start,
                         warranty_end=item.warranty_end,
                     )
@@ -223,6 +224,7 @@ class InventoryService:
                         quantity=1,
                         to_warehouse_id=data.warehouse_id,
                         supplier_id=data.supplier_id,
+                        project_id=data.project_id,
                         reference_type="purchase_in",
                         reference_id=ref_id,
                         note=combined_note,
@@ -247,6 +249,7 @@ class InventoryService:
                     quantity=item.quantity,
                     to_warehouse_id=data.warehouse_id,
                     supplier_id=data.supplier_id,
+                    project_id=data.project_id,
                     reference_type="purchase_in",
                     reference_id=ref_id,
                     note=combined_note,

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   FolderKanban,
   Package,
@@ -6,6 +6,9 @@ import {
   Clock,
   MapPin,
   Phone,
+  ArrowDownLeft,
+  ArrowUpRight,
+  Boxes,
 } from "lucide-react";
 import {
   Modal,
@@ -24,7 +27,7 @@ function defaultGetStatusBadge(status) {
 }
 
 export function ProjectViewModal({ project, isOpen, onClose, getStatusBadge = defaultGetStatusBadge }) {
-  const [activeTab, setActiveTab] = useState("items"); // "items" | "info"
+  const [activeTab, setActiveTab] = useState("all"); // "all" | "in" | "out" | "info"
   const [itemsData, setItemsData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
@@ -39,7 +42,13 @@ export function ProjectViewModal({ project, isOpen, onClose, getStatusBadge = de
       .then((data) => setItemsData(data))
       .catch((err) => {
         console.error("Failed to load project items", err);
-        setItemsData({ items: [], total_items: 0, total_quantity: 0 });
+        setItemsData({
+          items: [],
+          total_items: 0,
+          total_in_quantity: 0,
+          total_out_quantity: 0,
+          net_quantity: 0,
+        });
       })
       .finally(() => setLoading(false));
   }, [isOpen, project?.id]);
@@ -47,21 +56,34 @@ export function ProjectViewModal({ project, isOpen, onClose, getStatusBadge = de
   if (!isOpen || !project) return null;
 
   const allItems = itemsData?.items || [];
-  const filteredItems = search.trim()
-    ? allItems.filter((i) => {
-        const q = search.toLowerCase();
-        return (
-          i.product_name?.toLowerCase().includes(q) ||
-          i.product_code?.toLowerCase().includes(q) ||
-          i.variant_name?.toLowerCase().includes(q) ||
-          i.variant_sku?.toLowerCase().includes(q) ||
-          i.serial_number?.toLowerCase().includes(q) ||
-          i.barcode?.toLowerCase().includes(q) ||
-          i.reference_number?.toLowerCase().includes(q) ||
-          i.source_warehouse_name?.toLowerCase().includes(q)
-        );
-      })
-    : allItems;
+  const totalIn = itemsData?.total_in_quantity ?? 0;
+  const totalOut = itemsData?.total_out_quantity ?? 0;
+  const netBalance = itemsData?.net_quantity ?? 0;
+
+  // Filter items by active tab (in / out / all) and search query
+  const tabFilteredItems = useMemo(() => {
+    if (activeTab === "in") return allItems.filter((i) => i.direction === "in");
+    if (activeTab === "out") return allItems.filter((i) => i.direction === "out");
+    return allItems;
+  }, [allItems, activeTab]);
+
+  const filteredItems = useMemo(() => {
+    if (!search.trim()) return tabFilteredItems;
+    const q = search.toLowerCase().trim();
+    return tabFilteredItems.filter((i) => {
+      return (
+        i.product_name?.toLowerCase().includes(q) ||
+        i.product_code?.toLowerCase().includes(q) ||
+        i.variant_name?.toLowerCase().includes(q) ||
+        i.variant_sku?.toLowerCase().includes(q) ||
+        i.serial_number?.toLowerCase().includes(q) ||
+        i.barcode?.toLowerCase().includes(q) ||
+        i.reference_number?.toLowerCase().includes(q) ||
+        i.source_warehouse_name?.toLowerCase().includes(q) ||
+        i.note?.toLowerCase().includes(q)
+      );
+    });
+  }, [tabFilteredItems, search]);
 
   return (
     <Modal
@@ -85,17 +107,47 @@ export function ProjectViewModal({ project, isOpen, onClose, getStatusBadge = de
           <div className="inline-flex p-1 bg-slate-100 dark:bg-slate-800 rounded-lg text-xs font-medium">
             <button
               type="button"
-              onClick={() => setActiveTab("items")}
+              onClick={() => setActiveTab("all")}
               className={`px-3 py-1.5 rounded-md transition-all flex items-center gap-1.5 cursor-pointer ${
-                activeTab === "items"
+                activeTab === "all"
                   ? "bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 font-semibold shadow-sm"
                   : "text-slate-600 dark:text-slate-400 hover:text-slate-900"
               }`}
             >
-              <Package size={14} />
-              <span>Assigned Items</span>
-              <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] bg-blue-50 text-blue-700 dark:bg-blue-900/50 dark:text-blue-200 font-bold">
-                {itemsData ? itemsData.total_quantity : "..."}
+              <Boxes size={14} />
+              <span>All Movements</span>
+              <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] bg-slate-200 dark:bg-slate-600 text-slate-700 dark:text-slate-200 font-bold">
+                {allItems.length}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("in")}
+              className={`px-3 py-1.5 rounded-md transition-all flex items-center gap-1.5 cursor-pointer ${
+                activeTab === "in"
+                  ? "bg-white dark:bg-slate-700 text-emerald-600 dark:text-emerald-400 font-semibold shadow-sm"
+                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900"
+              }`}
+            >
+              <ArrowDownLeft size={14} className="text-emerald-600" />
+              <span>Stock In (+)</span>
+              <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 font-bold">
+                {totalIn}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("out")}
+              className={`px-3 py-1.5 rounded-md transition-all flex items-center gap-1.5 cursor-pointer ${
+                activeTab === "out"
+                  ? "bg-white dark:bg-slate-700 text-amber-600 dark:text-amber-400 font-semibold shadow-sm"
+                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900"
+              }`}
+            >
+              <ArrowUpRight size={14} className="text-amber-600" />
+              <span>Stock Out (-)</span>
+              <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 font-bold">
+                {totalOut}
               </span>
             </button>
             <button
@@ -112,22 +164,23 @@ export function ProjectViewModal({ project, isOpen, onClose, getStatusBadge = de
             </button>
           </div>
 
-          {activeTab === "items" && allItems.length > 0 && (
+          {activeTab !== "info" && allItems.length > 0 && (
             <div className="flex items-center gap-2">
               <ExportCSVButton
-                filename={`project-${project.code || project.id}-assigned-items`}
+                filename={`project-${project.code || project.id}-${activeTab}-items`}
                 columns={[
                   { label: "Date & Time", value: (i) => formatBDDateTime(i.dispatched_at) },
+                  { label: "Type", value: (i) => (i.direction === "in" ? "Stock In (+)" : "Stock Out (-)") },
                   { label: "Product", key: "product_name" },
                   { label: "Product Code", key: "product_code" },
                   { label: "Variant / SKU", value: (i) => i.variant_name || i.variant_sku || "Standard" },
                   { label: "Tracking", key: "tracking_type" },
                   { label: "Serial Number", value: (i) => i.serial_number || "—" },
                   { label: "Barcode", value: (i) => i.barcode || "—" },
-                  { label: "Quantity", value: (i) => i.quantity ?? 1 },
+                  { label: "Quantity", value: (i) => (i.direction === "in" ? `+${i.quantity}` : `-${i.quantity}`) },
                   { label: "Warehouse", key: "source_warehouse_name" },
                   { label: "Reference #", key: "reference_number" },
-                  { label: "Dispatched By", key: "dispatched_by_name" },
+                  { label: "Actor", key: "dispatched_by_name" },
                   { label: "Notes", key: "note" },
                 ]}
                 data={filteredItems}
@@ -137,24 +190,32 @@ export function ProjectViewModal({ project, isOpen, onClose, getStatusBadge = de
           )}
         </div>
 
-        {activeTab === "items" ? (
+        {activeTab !== "info" ? (
           <div className="space-y-3">
             {/* Quick Metrics */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <div className="p-3 bg-blue-50/70 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900/40 rounded-lg">
-                <span className="text-[11px] font-medium text-blue-600 dark:text-blue-400 uppercase tracking-wide block">
-                  Total Dispatched Units
+              <div className="p-3 bg-emerald-50/70 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900/40 rounded-lg">
+                <span className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400 uppercase tracking-wide block">
+                  Total Received (Stock In +)
                 </span>
-                <span className="text-xl font-bold text-blue-900 dark:text-blue-100 font-mono">
-                  {loading ? "..." : itemsData?.total_quantity ?? 0}
+                <span className="text-xl font-bold text-emerald-900 dark:text-emerald-100 font-mono">
+                  {loading ? "..." : `+${totalIn}`}
                 </span>
               </div>
-              <div className="p-3 bg-indigo-50/70 dark:bg-indigo-950/20 border border-indigo-200 dark:border-indigo-900/40 rounded-lg">
-                <span className="text-[11px] font-medium text-indigo-600 dark:text-indigo-400 uppercase tracking-wide block">
-                  Shipments / Batches
+              <div className="p-3 bg-amber-50/70 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/40 rounded-lg">
+                <span className="text-[11px] font-medium text-amber-600 dark:text-amber-400 uppercase tracking-wide block">
+                  Total Dispatched (Stock Out -)
                 </span>
-                <span className="text-xl font-bold text-indigo-900 dark:text-indigo-100 font-mono">
-                  {loading ? "..." : itemsData?.total_items ?? 0}
+                <span className="text-xl font-bold text-amber-900 dark:text-amber-100 font-mono">
+                  {loading ? "..." : `-${totalOut}`}
+                </span>
+              </div>
+              <div className="p-3 bg-purple-50/70 dark:bg-purple-950/20 border border-purple-200 dark:border-purple-900/40 rounded-lg">
+                <span className="text-[11px] font-medium text-purple-600 dark:text-purple-400 uppercase tracking-wide block">
+                  Remaining WH Balance
+                </span>
+                <span className="text-xl font-bold text-purple-900 dark:text-purple-100 font-mono">
+                  {loading ? "..." : netBalance}
                 </span>
               </div>
               <div className="p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg">
@@ -165,18 +226,10 @@ export function ProjectViewModal({ project, isOpen, onClose, getStatusBadge = de
                   {project.location || "—"}
                 </span>
               </div>
-              <div className="p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg">
-                <span className="text-[11px] font-medium text-slate-500 uppercase tracking-wide block">
-                  Contact
-                </span>
-                <span className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate block">
-                  {project.contact_info || "—"}
-                </span>
-              </div>
             </div>
 
-            {/* Filter / Search inside Assigned Items */}
-            {allItems.length > 0 && (
+            {/* Filter / Search inside Items */}
+            {tabFilteredItems.length > 0 && (
               <div className="flex items-center gap-2">
                 <SearchBox
                   value={search}
@@ -194,95 +247,123 @@ export function ProjectViewModal({ project, isOpen, onClose, getStatusBadge = de
                   <thead className="bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-semibold sticky top-0 z-10 border-b border-slate-200 dark:border-slate-700">
                     <tr>
                       <th className="py-2.5 px-3">Date &amp; Time</th>
+                      <th className="py-2.5 px-3 text-center">Type</th>
                       <th className="py-2.5 px-3">Product Name &amp; Code</th>
                       <th className="py-2.5 px-3">Variant / SKU</th>
                       <th className="py-2.5 px-3">Serial / Barcode</th>
                       <th className="py-2.5 px-3 text-center">Qty</th>
-                      <th className="py-2.5 px-3">Source WH</th>
+                      <th className="py-2.5 px-3">Warehouse</th>
                       <th className="py-2.5 px-3">Ref #</th>
-                      <th className="py-2.5 px-3">Dispatched By</th>
+                      <th className="py-2.5 px-3">Handled By</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                     {loading ? (
                       <tr>
-                        <td colSpan={8} className="py-10 text-center text-slate-400">
+                        <td colSpan={9} className="py-10 text-center text-slate-400">
                           <div className="inline-flex items-center gap-2">
                             <Clock className="animate-spin text-blue-500" size={16} />
-                            <span>Loading assigned items...</span>
+                            <span>Loading project stock movements...</span>
                           </div>
                         </td>
                       </tr>
                     ) : filteredItems.length === 0 ? (
                       <tr>
-                        <td colSpan={8} className="py-10 text-center">
+                        <td colSpan={9} className="py-10 text-center">
                           <Package size={36} className="text-slate-300 dark:text-slate-600 mx-auto mb-2" />
                           <p className="text-sm font-semibold text-slate-700 dark:text-slate-300">
-                            {search.trim() ? "No matching items found" : "No items assigned to this project yet"}
+                            {search.trim()
+                              ? "No matching items found"
+                              : activeTab === "in"
+                              ? "No Stock In (received) items for this project yet"
+                              : activeTab === "out"
+                              ? "No Stock Out (dispatched) items for this project yet"
+                              : "No movements recorded for this project yet"}
                           </p>
                           <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
                             {search.trim()
                               ? "Try clearing your search query above."
-                              : "When you stock out items and select this project as the destination, all dispatched items will appear here."}
+                              : "When you stock in or stock out items and select this project, all allocated movements will appear here."}
                           </p>
                         </td>
                       </tr>
                     ) : (
-                      filteredItems.map((item, idx) => (
-                        <tr
-                          key={item.id || idx}
-                          className="hover:bg-slate-50/70 dark:hover:bg-slate-800/50 transition-colors"
-                        >
-                          <td className="py-2 px-3 whitespace-nowrap text-slate-500 font-mono text-[11px]">
-                            {formatBDDateTime(item.dispatched_at)}
-                          </td>
-                          <td className="py-2 px-3">
-                            <div className="font-semibold text-slate-800 dark:text-slate-200">
-                              {item.product_name}
-                            </div>
-                            <span className="text-[10px] text-slate-400 font-mono">
-                              {item.product_code}
-                            </span>
-                          </td>
-                          <td className="py-2 px-3">
-                            <div className="text-slate-700 dark:text-slate-300">
-                              {item.variant_name || "—"}
-                            </div>
-                            {item.variant_sku && (
+                      filteredItems.map((item, idx) => {
+                        const isIn = item.direction === "in";
+                        return (
+                          <tr
+                            key={item.id || idx}
+                            className="hover:bg-slate-50/70 dark:hover:bg-slate-800/50 transition-colors"
+                          >
+                            <td className="py-2 px-3 whitespace-nowrap text-slate-500 font-mono text-[11px]">
+                              {formatBDDateTime(item.dispatched_at)}
+                            </td>
+                            <td className="py-2 px-3 text-center">
+                              <span
+                                className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                  isIn
+                                    ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
+                                    : "bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800"
+                                }`}
+                              >
+                                {isIn ? <ArrowDownLeft size={11} /> : <ArrowUpRight size={11} />}
+                                {isIn ? "Stock In" : "Stock Out"}
+                              </span>
+                            </td>
+                            <td className="py-2 px-3">
+                              <div className="font-semibold text-slate-800 dark:text-slate-200">
+                                {item.product_name}
+                              </div>
                               <span className="text-[10px] text-slate-400 font-mono">
-                                SKU: {item.variant_sku}
+                                {item.product_code}
                               </span>
-                            )}
-                          </td>
-                          <td className="py-2 px-3">
-                            {item.serial_number ? (
-                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-mono bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300 border border-blue-200 dark:border-blue-800 font-semibold">
-                                SN: {item.serial_number}
+                            </td>
+                            <td className="py-2 px-3">
+                              <div className="text-slate-700 dark:text-slate-300">
+                                {item.variant_name || "—"}
+                              </div>
+                              {item.variant_sku && (
+                                <span className="text-[10px] text-slate-400 font-mono">
+                                  SKU: {item.variant_sku}
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-2 px-3">
+                              {item.serial_number ? (
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-mono bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300 border border-blue-200 dark:border-blue-800 font-semibold">
+                                  SN: {item.serial_number}
+                                </span>
+                              ) : item.barcode ? (
+                                <span className="text-slate-600 dark:text-slate-400 font-mono text-[11px]">
+                                  {item.barcode}
+                                </span>
+                              ) : (
+                                <span className="text-slate-400">—</span>
+                              )}
+                            </td>
+                            <td className="py-2 px-3 text-center">
+                              <span
+                                className={`inline-block px-2 py-0.5 rounded-full font-bold font-mono text-xs ${
+                                  isIn
+                                    ? "bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300"
+                                    : "bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-950/40 dark:text-rose-300"
+                                }`}
+                              >
+                                {isIn ? `+${item.quantity}` : `-${item.quantity}`}
                               </span>
-                            ) : item.barcode ? (
-                              <span className="text-slate-600 dark:text-slate-400 font-mono text-[11px]">
-                                {item.barcode}
-                              </span>
-                            ) : (
-                              <span className="text-slate-400">—</span>
-                            )}
-                          </td>
-                          <td className="py-2 px-3 text-center">
-                            <span className="inline-block px-2 py-0.5 rounded-full font-bold font-mono text-xs bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-950/40 dark:text-rose-300">
-                              -{item.quantity}
-                            </span>
-                          </td>
-                          <td className="py-2 px-3 text-slate-700 dark:text-slate-300">
-                            {item.source_warehouse_name}
-                          </td>
-                          <td className="py-2 px-3 font-mono text-[11px] text-slate-600 dark:text-slate-400">
-                            {item.reference_number || "—"}
-                          </td>
-                          <td className="py-2 px-3 text-slate-600 dark:text-slate-400">
-                            {item.dispatched_by_name || "—"}
-                          </td>
-                        </tr>
-                      ))
+                            </td>
+                            <td className="py-2 px-3 text-slate-700 dark:text-slate-300">
+                              {item.source_warehouse_name}
+                            </td>
+                            <td className="py-2 px-3 font-mono text-[11px] text-slate-600 dark:text-slate-400">
+                              {item.reference_number || "—"}
+                            </td>
+                            <td className="py-2 px-3 text-slate-600 dark:text-slate-400">
+                              {item.dispatched_by_name || "—"}
+                            </td>
+                          </tr>
+                        );
+                      })
                     )}
                   </tbody>
                 </table>

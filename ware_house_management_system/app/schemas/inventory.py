@@ -95,6 +95,7 @@ class StockInLineItem(BaseModel):
 class StockInRequest(BaseModel):
     warehouse_id: int
     supplier_id: Optional[int] = None
+    project_id: Optional[int] = None
     reference_number: Optional[str] = None
     note: Optional[str] = None
     attachment_url: Optional[str] = None

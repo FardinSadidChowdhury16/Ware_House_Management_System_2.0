@@ -123,7 +123,16 @@ class ProjectRepository:
 
         project = self.get_project_by_id(project_id)
         if not project:
-            return {"items": [], "total_items": 0, "total_quantity": 0}
+            return {
+                "project_id": project_id,
+                "project_name": "Unknown",
+                "project_code": "—",
+                "total_items": 0,
+                "total_in_quantity": 0,
+                "total_out_quantity": 0,
+                "net_quantity": 0,
+                "items": [],
+            }
 
         movements = (
             self.db.query(StockMovement)
@@ -133,13 +142,13 @@ class ProjectRepository:
         )
 
         items_list = []
-        total_quantity = 0
+        total_in_quantity = 0
+        total_out_quantity = 0
         recorded_serials_or_items = set()
 
         for m in movements:
             product = self.db.query(Product).filter(Product.id == m.product_id).first()
             variant = self.db.query(ProductVariant).filter(ProductVariant.id == m.variant_id).first() if m.variant_id else None
-            wh = self.db.query(Warehouse).filter(Warehouse.id == m.from_warehouse_id).first() if m.from_warehouse_id else None
             user = self.db.query(User).filter(User.id == m.created_by).first() if m.created_by else None
             serialized_item = self.db.query(SerializedItem).filter(SerializedItem.id == m.product_item_id).first() if m.product_item_id else None
 
@@ -162,11 +171,33 @@ class ProjectRepository:
                     ref_no = m_match.group(1).strip()
 
             qty = m.quantity or 1
-            total_quantity += qty
+
+            mov_type_str = (
+                m.movement_type.value
+                if hasattr(m.movement_type, "value")
+                else str(m.movement_type)
+            ).lower()
+
+            is_inbound = (
+                m.to_warehouse_id is not None
+                or "in" in mov_type_str
+                or mov_type_str == "purchase_in"
+            ) and not (m.from_warehouse_id is not None and "out" in mov_type_str)
+
+            direction = "in" if is_inbound else "out"
+            target_wh_id = m.to_warehouse_id if is_inbound else m.from_warehouse_id
+            wh = self.db.query(Warehouse).filter(Warehouse.id == target_wh_id).first() if target_wh_id else None
+
+            if is_inbound:
+                total_in_quantity += qty
+            else:
+                total_out_quantity += qty
 
             items_list.append({
                 "id": m.id,
                 "movement_id": m.id,
+                "direction": direction,
+                "movement_type": mov_type_str,
                 "product_id": m.product_id,
                 "product_name": product.name if product else f"Product #{m.product_id}",
                 "product_code": product.product_code if product else "—",
@@ -177,8 +208,8 @@ class ProjectRepository:
                 "serial_number": serial_no,
                 "barcode": barcode_val,
                 "quantity": qty,
-                "source_warehouse_id": m.from_warehouse_id,
-                "source_warehouse_name": wh.name if wh else (f"WH #{m.from_warehouse_id}" if m.from_warehouse_id else "—"),
+                "source_warehouse_id": target_wh_id,
+                "source_warehouse_name": wh.name if wh else (f"WH #{target_wh_id}" if target_wh_id else "—"),
                 "reference_number": ref_no,
                 "note": m.note,
                 "attachment_url": m.attachment_url,
@@ -197,10 +228,12 @@ class ProjectRepository:
                 product = self.db.query(Product).filter(Product.id == s.product_id).first()
                 variant = self.db.query(ProductVariant).filter(ProductVariant.id == s.variant_id).first() if s.variant_id else None
                 wh = self.db.query(Warehouse).filter(Warehouse.id == s.warehouse_id).first() if s.warehouse_id else None
-                total_quantity += 1
+                total_in_quantity += 1
                 items_list.append({
                     "id": f"si-{s.id}",
                     "movement_id": None,
+                    "direction": "in",
+                    "movement_type": "direct_allocation",
                     "product_id": s.product_id,
                     "product_name": product.name if product else f"Product #{s.product_id}",
                     "product_code": product.product_code if product else "—",
@@ -217,7 +250,7 @@ class ProjectRepository:
                     "note": f"Status: {s.status.value if hasattr(s.status, 'value') else s.status}",
                     "attachment_url": None,
                     "dispatched_by_id": None,
-                    "dispatched_by_name": "Direct Assignment",
+                    "dispatched_by_name": "Direct Allocation",
                     "dispatched_at": s.created_at,
                 })
 
@@ -226,7 +259,9 @@ class ProjectRepository:
             "project_name": project.name,
             "project_code": project.code,
             "total_items": len(items_list),
-            "total_quantity": total_quantity,
+            "total_in_quantity": total_in_quantity,
+            "total_out_quantity": total_out_quantity,
+            "net_quantity": total_in_quantity - total_out_quantity,
             "items": items_list,
         }
 
@@ -295,10 +330,15 @@ class ProjectRepository:
                     "active_projects": 0,
                     "completed_projects": 0,
                     "on_hold_projects": 0,
-                    "total_opening_units": 0,
-                    "total_period_units": 0,
-                    "total_cumulative_units": 0,
-                    "total_shipments": 0,
+                    "total_opening_balance": 0,
+                    "total_period_in": 0,
+                    "total_period_out": 0,
+                    "total_period_balance": 0,
+                    "total_closing_in": 0,
+                    "total_closing_out": 0,
+                    "total_closing_balance": 0,
+                    "total_shipments_in": 0,
+                    "total_shipments_out": 0,
                 },
                 "items": [],
             }
@@ -307,7 +347,12 @@ class ProjectRepository:
 
         sm_query = self.db.query(StockMovement).filter(StockMovement.project_id.in_(project_ids))
         if warehouse_id:
-            sm_query = sm_query.filter(StockMovement.from_warehouse_id == warehouse_id)
+            sm_query = sm_query.filter(
+                or_(
+                    StockMovement.from_warehouse_id == warehouse_id,
+                    StockMovement.to_warehouse_id == warehouse_id,
+                )
+            )
         movements = sm_query.order_by(StockMovement.created_at.asc()).all()
 
         si_query = self.db.query(SerializedItem).filter(SerializedItem.project_id.in_(project_ids))
@@ -328,10 +373,14 @@ class ProjectRepository:
                 serials_by_proj[s.project_id].append(s)
 
         items_report = []
-        tot_opening = 0
-        tot_period = 0
-        tot_cumulative = 0
-        tot_shipments = 0
+        tot_opening_bal = 0
+        tot_period_in = 0
+        tot_period_out = 0
+        tot_closing_in = 0
+        tot_closing_out = 0
+        tot_closing_bal = 0
+        tot_shipments_in = 0
+        tot_shipments_out = 0
 
         active_count = 0
         completed_count = 0
@@ -348,54 +397,114 @@ class ProjectRepository:
             p_movs = movements_by_proj.get(p.id, [])
             p_serials = serials_by_proj.get(p.id, [])
 
-            opening_units = 0
-            period_units = 0
-            period_shipments = 0
+            opening_in = 0
+            opening_out = 0
+            period_in = 0
+            period_out = 0
+            period_in_shipments = 0
+            period_out_shipments = 0
             distinct_products = set()
-            last_dispatched = None
+            last_inbound = None
+            last_outbound = None
+            last_activity = None
 
             for m in p_movs:
                 qty = m.quantity or 1
                 distinct_products.add(m.product_id)
                 m_dt = m.created_at
                 if m_dt:
-                    if last_dispatched is None or m_dt > last_dispatched:
-                        last_dispatched = m_dt
+                    if last_activity is None or m_dt > last_activity:
+                        last_activity = m_dt
+
+                mov_type_str = (
+                    m.movement_type.value
+                    if hasattr(m.movement_type, "value")
+                    else str(m.movement_type)
+                ).lower()
+
+                is_inbound = (
+                    m.to_warehouse_id is not None
+                    or "in" in mov_type_str
+                    or mov_type_str == "purchase_in"
+                ) and not (m.from_warehouse_id is not None and "out" in mov_type_str)
+
+                if is_inbound:
+                    if m_dt and (last_inbound is None or m_dt > last_inbound):
+                        last_inbound = m_dt
+                else:
+                    if m_dt and (last_outbound is None or m_dt > last_outbound):
+                        last_outbound = m_dt
 
                 if has_date_filter:
                     if dt_from and m_dt and m_dt < dt_from:
-                        opening_units += qty
+                        if is_inbound:
+                            opening_in += qty
+                        else:
+                            opening_out += qty
                     elif (not dt_from or (m_dt and m_dt >= dt_from)) and (not dt_to or (m_dt and m_dt < dt_to)):
-                        period_units += qty
-                        period_shipments += 1
+                        if is_inbound:
+                            period_in += qty
+                            period_in_shipments += 1
+                        else:
+                            period_out += qty
+                            period_out_shipments += 1
                 else:
-                    period_units += qty
-                    period_shipments += 1
+                    if is_inbound:
+                        period_in += qty
+                        period_in_shipments += 1
+                    else:
+                        period_out += qty
+                        period_out_shipments += 1
 
             for s in p_serials:
                 distinct_products.add(s.product_id)
                 s_dt = s.created_at
                 if s_dt:
-                    if last_dispatched is None or s_dt > last_dispatched:
-                        last_dispatched = s_dt
+                    if last_activity is None or s_dt > last_activity:
+                        last_activity = s_dt
+                    if last_inbound is None or s_dt > last_inbound:
+                        last_inbound = s_dt
 
                 if has_date_filter:
                     if dt_from and s_dt and s_dt < dt_from:
-                        opening_units += 1
+                        opening_in += 1
                     elif (not dt_from or (s_dt and s_dt >= dt_from)) and (not dt_to or (s_dt and s_dt < dt_to)):
-                        period_units += 1
-                        period_shipments += 1
+                        period_in += 1
+                        period_in_shipments += 1
                 else:
-                    period_units += 1
-                    period_shipments += 1
+                    period_in += 1
+                    period_in_shipments += 1
 
-            closing_units = opening_units + period_units
-            all_time_units = sum((m.quantity or 1) for m in p_movs) + len(p_serials)
+            opening_balance = opening_in - opening_out
+            period_balance = period_in - period_out
+            closing_in = opening_in + period_in
+            closing_out = opening_out + period_out
+            closing_balance = closing_in - closing_out
 
-            tot_opening += opening_units
-            tot_period += period_units
-            tot_cumulative += closing_units
-            tot_shipments += period_shipments
+            all_time_in = (
+                sum((m.quantity or 1) for m in p_movs if (
+                    m.to_warehouse_id is not None
+                    or "in" in (m.movement_type.value if hasattr(m.movement_type, "value") else str(m.movement_type)).lower()
+                ))
+                + len(p_serials)
+            )
+            all_time_out = sum(
+                (m.quantity or 1)
+                for m in p_movs
+                if not (
+                    m.to_warehouse_id is not None
+                    or "in" in (m.movement_type.value if hasattr(m.movement_type, "value") else str(m.movement_type)).lower()
+                )
+            )
+
+            tot_opening_bal += opening_balance
+            tot_period_in += period_in
+            tot_period_out += period_out
+            tot_closing_in += closing_in
+            tot_closing_out += closing_out
+            tot_closing_bal += closing_balance
+            tot_shipments_in += period_in_shipments
+            tot_shipments_out += period_out_shipments
 
             items_report.append({
                 "project_id": p.id,
@@ -407,13 +516,24 @@ class ProjectRepository:
                 "status": p.status,
                 "is_active": p.is_active,
                 "created_at": p.created_at.isoformat() if p.created_at else None,
-                "opening_units": opening_units,
-                "period_units": period_units,
-                "closing_units": closing_units,
-                "all_time_units": all_time_units,
+                "opening_in": opening_in,
+                "opening_out": opening_out,
+                "opening_balance": opening_balance,
+                "period_in": period_in,
+                "period_out": period_out,
+                "period_balance": period_balance,
+                "closing_in": closing_in,
+                "closing_out": closing_out,
+                "closing_balance": closing_balance,
+                "all_time_in": all_time_in,
+                "all_time_out": all_time_out,
+                "all_time_balance": all_time_in - all_time_out,
                 "distinct_products_count": len(distinct_products),
-                "shipments_count": period_shipments,
-                "last_dispatched_at": last_dispatched.isoformat() if last_dispatched else None,
+                "shipments_in_count": period_in_shipments,
+                "shipments_out_count": period_out_shipments,
+                "last_activity_at": last_activity.isoformat() if last_activity else None,
+                "last_inbound_at": last_inbound.isoformat() if last_inbound else None,
+                "last_outbound_at": last_outbound.isoformat() if last_outbound else None,
             })
 
         return {
@@ -422,10 +542,15 @@ class ProjectRepository:
                 "active_projects": active_count,
                 "completed_projects": completed_count,
                 "on_hold_projects": on_hold_count,
-                "total_opening_units": tot_opening,
-                "total_period_units": tot_period,
-                "total_cumulative_units": tot_cumulative,
-                "total_shipments": tot_shipments,
+                "total_opening_balance": tot_opening_bal,
+                "total_period_in": tot_period_in,
+                "total_period_out": tot_period_out,
+                "total_period_balance": tot_period_in - tot_period_out,
+                "total_closing_in": tot_closing_in,
+                "total_closing_out": tot_closing_out,
+                "total_closing_balance": tot_closing_bal,
+                "total_shipments_in": tot_shipments_in,
+                "total_shipments_out": tot_shipments_out,
             },
             "items": items_report,
         }

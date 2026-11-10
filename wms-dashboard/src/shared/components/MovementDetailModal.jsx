@@ -272,6 +272,16 @@ export function MovementDetailModal({ movement, direction, onClose }) {
                 {partyName || "—"}
               </span>
             </div>
+            {isInbound && (movement.project_name || movement.project_id) && (
+              <div>
+                <span className="mb-0.5 block text-slate-400">Project Allocation</span>
+                <span className="flex items-center gap-1 font-semibold text-indigo-700 dark:text-indigo-300 truncate">
+                  <FolderKanban size={13} className="shrink-0 text-indigo-600" />
+                  {movement.project_name || `Project #${movement.project_id}`}
+                  {movement.project_code ? ` (${movement.project_code})` : ""}
+                </span>
+              </div>
+            )}
             <div>
               <span className="mb-0.5 block text-slate-400">Reference #</span>
               <span className="block truncate font-mono font-medium text-slate-800">
