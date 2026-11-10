@@ -39,6 +39,23 @@ export const projectsApi = {
     };
   },
 
+  async getSummaryReport(params = {}) {
+    const { data } = await httpClient.get("/projects/summary-report", { params });
+    return data || {
+      summary: {
+        total_projects: 0,
+        active_projects: 0,
+        completed_projects: 0,
+        on_hold_projects: 0,
+        total_opening_units: 0,
+        total_period_units: 0,
+        total_cumulative_units: 0,
+        total_shipments: 0,
+      },
+      items: [],
+    };
+  },
+
   async getProject(id) {
     const { data } = await httpClient.get(`/projects/${id}`);
     return normalizeProject(data);

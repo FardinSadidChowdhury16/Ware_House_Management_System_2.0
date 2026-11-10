@@ -20,6 +20,26 @@ def get_project_stats(
     return controller.get_stats()
 
 
+@router.get("/summary-report")
+def get_project_summary_report(
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    status: Optional[str] = None,
+    warehouse_id: Optional[int] = None,
+    search: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    controller = ProjectController(db)
+    return controller.get_summary_report(
+        date_from=date_from,
+        date_to=date_to,
+        status=status,
+        warehouse_id=warehouse_id,
+        search=search,
+    )
+
+
 @router.get("")
 def get_projects(
     skip: int = 0,

@@ -83,3 +83,19 @@ class ProjectService:
     def get_assigned_items(self, project_id: int) -> dict:
         self.get_project_by_id(project_id)
         return self.repository.get_assigned_items(project_id)
+
+    def get_summary_report(
+        self,
+        date_from: Optional[str] = None,
+        date_to: Optional[str] = None,
+        status: Optional[str] = None,
+        warehouse_id: Optional[int] = None,
+        search: Optional[str] = None,
+    ) -> dict:
+        return self.repository.get_project_summary_report(
+            date_from=date_from,
+            date_to=date_to,
+            status=status,
+            warehouse_id=warehouse_id,
+            search=search,
+        )

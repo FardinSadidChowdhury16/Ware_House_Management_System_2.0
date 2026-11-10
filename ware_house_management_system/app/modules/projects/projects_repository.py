@@ -229,3 +229,203 @@ class ProjectRepository:
             "total_quantity": total_quantity,
             "items": items_list,
         }
+
+    def get_project_summary_report(
+        self,
+        date_from: Optional[str] = None,
+        date_to: Optional[str] = None,
+        status: Optional[str] = None,
+        warehouse_id: Optional[int] = None,
+        search: Optional[str] = None,
+    ) -> dict:
+        from datetime import datetime, time, timedelta
+        from app.models.inventory import StockMovement, SerializedItem
+
+        d_from = None
+        if date_from and str(date_from).strip():
+            clean_from = str(date_from).strip().split("T")[0]
+            try:
+                d_from = datetime.strptime(clean_from, "%Y-%m-%d").date()
+            except Exception:
+                try:
+                    d_from = datetime.fromisoformat(str(date_from).strip()).date()
+                except Exception:
+                    d_from = None
+
+        d_to = None
+        if date_to and str(date_to).strip():
+            clean_to = str(date_to).strip().split("T")[0]
+            try:
+                d_to = datetime.strptime(clean_to, "%Y-%m-%d").date()
+            except Exception:
+                try:
+                    d_to = datetime.fromisoformat(str(date_to).strip()).date()
+                except Exception:
+                    d_to = None
+
+        dt_from = None
+        if d_from:
+            dt_from = datetime.combine(d_from, time.min) - timedelta(hours=6)
+
+        dt_to = None
+        if d_to:
+            dt_to = datetime.combine(d_to + timedelta(days=1), time.min) + timedelta(hours=6)
+
+        has_date_filter = bool(dt_from or dt_to)
+
+        p_query = self.db.query(Project)
+        if search and search.strip():
+            pat = f"%{search.strip()}%"
+            p_query = p_query.filter(
+                or_(
+                    Project.name.ilike(pat),
+                    Project.code.ilike(pat),
+                    Project.location.ilike(pat),
+                    Project.contact_info.ilike(pat),
+                )
+            )
+        if status and status != "all":
+            p_query = p_query.filter(Project.status == status)
+
+        projects = p_query.order_by(Project.created_at.desc(), Project.id.desc()).all()
+        if not projects:
+            return {
+                "summary": {
+                    "total_projects": 0,
+                    "active_projects": 0,
+                    "completed_projects": 0,
+                    "on_hold_projects": 0,
+                    "total_opening_units": 0,
+                    "total_period_units": 0,
+                    "total_cumulative_units": 0,
+                    "total_shipments": 0,
+                },
+                "items": [],
+            }
+
+        project_ids = [p.id for p in projects]
+
+        sm_query = self.db.query(StockMovement).filter(StockMovement.project_id.in_(project_ids))
+        if warehouse_id:
+            sm_query = sm_query.filter(StockMovement.from_warehouse_id == warehouse_id)
+        movements = sm_query.order_by(StockMovement.created_at.asc()).all()
+
+        si_query = self.db.query(SerializedItem).filter(SerializedItem.project_id.in_(project_ids))
+        if warehouse_id:
+            si_query = si_query.filter(SerializedItem.warehouse_id == warehouse_id)
+        direct_serials = si_query.all()
+
+        movements_by_proj = {pid: [] for pid in project_ids}
+        movement_serial_ids = set()
+        for m in movements:
+            movements_by_proj[m.project_id].append(m)
+            if m.product_item_id:
+                movement_serial_ids.add(m.product_item_id)
+
+        serials_by_proj = {pid: [] for pid in project_ids}
+        for s in direct_serials:
+            if s.id not in movement_serial_ids:
+                serials_by_proj[s.project_id].append(s)
+
+        items_report = []
+        tot_opening = 0
+        tot_period = 0
+        tot_cumulative = 0
+        tot_shipments = 0
+
+        active_count = 0
+        completed_count = 0
+        on_hold_count = 0
+
+        for p in projects:
+            if p.status == "active":
+                active_count += 1
+            elif p.status == "completed":
+                completed_count += 1
+            elif p.status == "on_hold":
+                on_hold_count += 1
+
+            p_movs = movements_by_proj.get(p.id, [])
+            p_serials = serials_by_proj.get(p.id, [])
+
+            opening_units = 0
+            period_units = 0
+            period_shipments = 0
+            distinct_products = set()
+            last_dispatched = None
+
+            for m in p_movs:
+                qty = m.quantity or 1
+                distinct_products.add(m.product_id)
+                m_dt = m.created_at
+                if m_dt:
+                    if last_dispatched is None or m_dt > last_dispatched:
+                        last_dispatched = m_dt
+
+                if has_date_filter:
+                    if dt_from and m_dt and m_dt < dt_from:
+                        opening_units += qty
+                    elif (not dt_from or (m_dt and m_dt >= dt_from)) and (not dt_to or (m_dt and m_dt < dt_to)):
+                        period_units += qty
+                        period_shipments += 1
+                else:
+                    period_units += qty
+                    period_shipments += 1
+
+            for s in p_serials:
+                distinct_products.add(s.product_id)
+                s_dt = s.created_at
+                if s_dt:
+                    if last_dispatched is None or s_dt > last_dispatched:
+                        last_dispatched = s_dt
+
+                if has_date_filter:
+                    if dt_from and s_dt and s_dt < dt_from:
+                        opening_units += 1
+                    elif (not dt_from or (s_dt and s_dt >= dt_from)) and (not dt_to or (s_dt and s_dt < dt_to)):
+                        period_units += 1
+                        period_shipments += 1
+                else:
+                    period_units += 1
+                    period_shipments += 1
+
+            closing_units = opening_units + period_units
+            all_time_units = sum((m.quantity or 1) for m in p_movs) + len(p_serials)
+
+            tot_opening += opening_units
+            tot_period += period_units
+            tot_cumulative += closing_units
+            tot_shipments += period_shipments
+
+            items_report.append({
+                "project_id": p.id,
+                "project_name": p.name,
+                "project_code": p.code,
+                "location": p.location,
+                "contact_info": p.contact_info,
+                "description": p.description,
+                "status": p.status,
+                "is_active": p.is_active,
+                "created_at": p.created_at.isoformat() if p.created_at else None,
+                "opening_units": opening_units,
+                "period_units": period_units,
+                "closing_units": closing_units,
+                "all_time_units": all_time_units,
+                "distinct_products_count": len(distinct_products),
+                "shipments_count": period_shipments,
+                "last_dispatched_at": last_dispatched.isoformat() if last_dispatched else None,
+            })
+
+        return {
+            "summary": {
+                "total_projects": len(projects),
+                "active_projects": active_count,
+                "completed_projects": completed_count,
+                "on_hold_projects": on_hold_count,
+                "total_opening_units": tot_opening,
+                "total_period_units": tot_period,
+                "total_cumulative_units": tot_cumulative,
+                "total_shipments": tot_shipments,
+            },
+            "items": items_report,
+        }
