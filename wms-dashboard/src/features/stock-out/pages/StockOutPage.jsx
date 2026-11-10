@@ -1026,6 +1026,14 @@ export function StockOutPage() {
           }} 
           className="min-w-[180px] max-w-xs shrink-0"
         />
+        <FilterChips
+          value={destinationFilter}
+          onChange={(val) => {
+            setDestinationFilter(val);
+            setPage(1);
+          }}
+          options={destinationFilterOptions}
+        />
         <Select
           value={localWarehouseId}
           onChange={(val) => {
@@ -1042,16 +1050,6 @@ export function StockOutPage() {
           className="min-w-36 w-auto text-xs py-1.5"
           placeholder="All Warehouses"
         />
-        <Select
-          value={destinationFilter}
-          onChange={(val) => {
-            setDestinationFilter(val);
-            setPage(1);
-          }}
-          options={destinationFilterOptions}
-          className="min-w-36 w-auto text-xs py-1.5"
-          placeholder="All items"
-        />
         <DateRangeFilter
           fromDate={fromDate}
           toDate={toDate}
@@ -1059,18 +1057,6 @@ export function StockOutPage() {
           onToDateChange={(value) => { setToDate(value); setPage(1); }}
         />
       </Toolbar>
-
-      {/* 3 Quick Filters: All items, All customers, All projects */}
-      <div className="flex items-center gap-2 mb-3 mt-1 overflow-x-auto pb-0.5">
-        <FilterChips
-          value={destinationFilter}
-          onChange={(val) => {
-            setDestinationFilter(val);
-            setPage(1);
-          }}
-          options={destinationFilterOptions}
-        />
-      </div>
 
       {/* Main Table Card */}
       <Card>
