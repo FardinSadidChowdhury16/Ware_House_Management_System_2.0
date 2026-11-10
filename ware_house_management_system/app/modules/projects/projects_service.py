@@ -79,3 +79,7 @@ class ProjectService:
 
     def get_stats(self) -> dict:
         return self.repository.get_stats()
+
+    def get_assigned_items(self, project_id: int) -> dict:
+        self.get_project_by_id(project_id)
+        return self.repository.get_assigned_items(project_id)

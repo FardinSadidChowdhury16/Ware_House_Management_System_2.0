@@ -28,6 +28,10 @@ export const stockOutApi = {
     const { data } = await httpClient.get(`/projects/${projectId}`);
     return data;
   },
+  async getProjectItems(projectId) {
+    const { data } = await httpClient.get(`/projects/${projectId}/items`);
+    return data || { items: [], total_items: 0, total_quantity: 0 };
+  },
   async listProductsSummary() {
     const { data } = await httpClient.get("/products/summary");
     return Array.isArray(data) ? data : data.items || data.data || [];

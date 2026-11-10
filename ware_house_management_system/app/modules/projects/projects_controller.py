@@ -41,3 +41,6 @@ class ProjectController:
 
     def get_stats(self):
         return self.service.get_stats()
+
+    def get_assigned_items(self, project_id: int):
+        return self.service.get_assigned_items(project_id)

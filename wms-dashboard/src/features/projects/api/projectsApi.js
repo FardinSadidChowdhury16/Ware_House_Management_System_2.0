@@ -44,6 +44,11 @@ export const projectsApi = {
     return normalizeProject(data);
   },
 
+  async getProjectItems(id) {
+    const { data } = await httpClient.get(`/projects/${id}/items`);
+    return data || { items: [], total_items: 0, total_quantity: 0 };
+  },
+
   async createProject(payload) {
     const body = {
       name: payload.name.trim(),

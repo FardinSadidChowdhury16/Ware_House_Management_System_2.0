@@ -88,16 +88,23 @@ function CustomerDetailModal({ isOpen, onClose, customerId, customers }) {
 // ─── Project Details Modal ────────────────────────────────────────────────
 function ProjectDetailModal({ isOpen, onClose, projectId, projects }) {
   const [detail, setDetail] = useState(null);
+  const [itemsData, setItemsData] = useState(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (!isOpen || !projectId) { setDetail(null); return; }
+    if (!isOpen || !projectId) { setDetail(null); setItemsData(null); return; }
     const local = projects?.find(p => String(p.id) === String(projectId));
-    if (local) { setDetail(local); return; }
+    if (local) setDetail(local);
     setLoading(true);
-    stockOutApi.getProjectDetail(projectId)
-      .then(setDetail)
-      .catch(() => setDetail(null))
+    Promise.all([
+      stockOutApi.getProjectDetail(projectId),
+      stockOutApi.getProjectItems(projectId),
+    ])
+      .then(([proj, items]) => {
+        setDetail(proj);
+        setItemsData(items);
+      })
+      .catch(() => {})
       .finally(() => setLoading(false));
   }, [isOpen, projectId, projects]);
 
@@ -108,10 +115,10 @@ function ProjectDetailModal({ isOpen, onClose, projectId, projects }) {
       isOpen={isOpen}
       onClose={onClose}
       title="Project Details"
-      size="sm"
+      size="md"
       footer={<GhostButton onClick={onClose}>Close</GhostButton>}
     >
-      {loading ? (
+      {loading && !detail ? (
         <p className="text-sm text-slate-400 text-center py-4">Loading...</p>
       ) : !detail ? (
         <p className="text-sm text-slate-400 text-center py-4">No details found.</p>
@@ -152,6 +159,41 @@ function ProjectDetailModal({ isOpen, onClose, projectId, projects }) {
               }`}>
                 {detail.status}
               </span>
+            </div>
+          )}
+
+          {itemsData && (
+            <div className="pt-2 border-t border-slate-100">
+              <div className="flex items-center justify-between mb-1.5">
+                <p className="text-xs font-semibold text-slate-700">Dispatched Inventory</p>
+                <span className="text-[11px] font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-full border border-indigo-200">
+                  {itemsData.total_quantity || 0} units ({itemsData.total_items || 0} shipments)
+                </span>
+              </div>
+              {itemsData.items && itemsData.items.length > 0 ? (
+                <div className="max-h-36 overflow-y-auto border border-slate-200 rounded-md bg-white">
+                  <table className="w-full text-[11px] text-left">
+                    <thead className="bg-slate-50 text-slate-500 font-medium sticky top-0">
+                      <tr>
+                        <th className="py-1 px-2">Product</th>
+                        <th className="py-1 px-2">SN / Barcode</th>
+                        <th className="py-1 px-2 text-right">Qty</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {itemsData.items.map((i, idx) => (
+                        <tr key={i.id || idx}>
+                          <td className="py-1 px-2 font-medium text-slate-800">{i.product_name}</td>
+                          <td className="py-1 px-2 font-mono text-[10px] text-slate-500">{i.serial_number || i.barcode || "—"}</td>
+                          <td className="py-1 px-2 text-right font-mono font-bold text-rose-600">-{i.quantity}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p className="text-xs text-slate-400">No items dispatched to this project yet.</p>
+              )}
             </div>
           )}
         </div>

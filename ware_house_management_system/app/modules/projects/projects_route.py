@@ -53,6 +53,16 @@ def get_project(
     return controller.get_project(id)
 
 
+@router.get("/{id}/items")
+def get_project_assigned_items(
+    id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    controller = ProjectController(db)
+    return controller.get_assigned_items(id)
+
+
 @router.put("/{id}", response_model=ProjectResponse)
 def update_project(
     id: int,
