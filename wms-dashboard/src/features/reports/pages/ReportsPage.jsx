@@ -167,6 +167,8 @@ const PERIOD_OPTIONS = [
   { value: "custom", label: "Custom Range" },
 ];
 
+const SELL_PERIOD_OPTIONS = PERIOD_OPTIONS.filter((opt) => opt.value !== "custom");
+
 function matchesReportIdentity(item, { productId, barcode, name }) {
   if (productId && String(item.product_id) !== String(productId)) return false;
   const barcodeQuery = String(barcode || "").trim().toLowerCase();
@@ -615,10 +617,11 @@ export function ReportsPage({ initialReport = "stock_summary" }) {
   const [serviceSearch, setServiceSearch] = useState("");
   const [servicePage, setServicePage] = useState(1);
   const SERVICE_PAGE_SIZE = 20;
+
+  // Stock Sell Report 3-Filter States
+  const [sellWarehouseFilter, setSellWarehouseFilter] = useState("all");
+  const [sellProductId, setSellProductId] = useState("all");
   const [sellSearch, setSellSearch] = useState("");
-  const [sellProductId, setSellProductId] = useState("");
-  const [sellBarcode, setSellBarcode] = useState("");
-  const [sellName, setSellName] = useState("");
   const [sellCategoryFilter, setSellCategoryFilter] = useState("");
   const [sellDatePreset, setSellDatePreset] = useState("all");
   const [sellDateFrom, setSellDateFrom] = useState("");
@@ -640,14 +643,23 @@ export function ReportsPage({ initialReport = "stock_summary" }) {
   });
   const reportProducts = reportProductsResult?.items || [];
 
+  // Sync warehouse filter when header context changes
+  useEffect(() => {
+    if (selectedWarehouseId) {
+      setSellWarehouseFilter(String(selectedWarehouseId));
+    }
+  }, [selectedWarehouseId]);
+
+  const effectiveSellWhId = sellWarehouseFilter !== "all" 
+    ? Number(sellWarehouseFilter) 
+    : (selectedWarehouseId ? Number(selectedWarehouseId) : undefined);
+
   const sellParams = {
     page: sellPage,
     page_size: SELL_PAGE_SIZE,
-    warehouse_id: selectedWarehouseId || undefined,
+    warehouse_id: effectiveSellWhId,
+    product_id: sellProductId !== "all" ? Number(sellProductId) : undefined,
     category_id: sellCategoryFilter ? Number(sellCategoryFilter) : undefined,
-    product_id: sellProductId || undefined,
-    barcode: sellBarcode.trim() || undefined,
-    name: sellName.trim() || undefined,
     date_from: sellDateFrom || undefined,
     date_to: sellDateTo || undefined,
     search: sellSearch.trim() || undefined,
@@ -674,6 +686,37 @@ export function ReportsPage({ initialReport = "stock_summary" }) {
   const sellItems = salesReportData?.transactions?.items || [];
   const totalSales = salesReportData?.transactions?.total || 0;
   const sellTotalPages = salesReportData?.transactions?.total_pages || 1;
+
+  const selectedProductItem = useMemo(() => {
+    if (sellProductId === "all") return null;
+    const foundInBreakdown = productBreakdown.find((p) => String(p.product_id) === String(sellProductId));
+    if (foundInBreakdown) return foundInBreakdown;
+    const foundInList = reportProducts.find((p) => String(p.id) === String(sellProductId));
+    if (foundInList) {
+      let uPrice = 0.0;
+      if (foundInList.variants && foundInList.variants.length > 0) {
+        for (const v of foundInList.variants) {
+          if (v.selling_price) {
+            uPrice = Number(v.selling_price);
+            break;
+          }
+        }
+      }
+      return {
+        product_id: foundInList.id,
+        product_name: foundInList.name,
+        product_code: foundInList.product_code,
+        category_name: foundInList.category?.name || "General",
+        tracking_type: foundInList.tracking_type || "bulk",
+        unit_price: uPrice,
+        total_units_sold: 0,
+        total_sales_value: 0.0,
+        current_stock: 0,
+        warehouse_names: [],
+      };
+    }
+    return null;
+  }, [sellProductId, productBreakdown, reportProducts]);
 
   const handleDatePreset = (presetId) => {
     setSellDatePreset(presetId);
@@ -726,14 +769,16 @@ export function ReportsPage({ initialReport = "stock_summary" }) {
   return (
     <div className="space-y-6">
       {/* ─── Page Title & Subtitle ─── */}
-      <div>
-        <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">
-          {REPORT_HEADERS[activeReport]?.title || "Warehouse Report"}
-        </h2>
-        <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-          {REPORT_HEADERS[activeReport]?.subtitle || "Detailed warehouse reporting metrics and audit records."}
-        </p>
-      </div>
+      {activeReport !== "stock_sell_report" && (
+        <div>
+          <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">
+            {REPORT_HEADERS[activeReport]?.title || "Warehouse Report"}
+          </h2>
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+            {REPORT_HEADERS[activeReport]?.subtitle || "Detailed warehouse reporting metrics and audit records."}
+          </p>
+        </div>
+      )}
 
       {/* Scoped Warehouse Indicator if warehouse filter is selected */}
       {currentWh && (
@@ -1404,54 +1449,170 @@ export function ReportsPage({ initialReport = "stock_summary" }) {
       {/* ────────────────────────────────────────────────────────────────────── */}
       {activeReport === "stock_sell_report" && (
         <div className="space-y-4">
-          {/* 1. Sales Summary KPI Cards */}
-          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3.5">
-            <StatCard
-              label="Total Sales Value"
-              value={isSellLoading ? "..." : formatBDT(salesSummary.total_sales_amount)}
-              icon={DollarSign}
-              tint="emerald"
-            />
-            <StatCard
-              label="Total Units Sold"
-              value={isSellLoading ? "..." : `${salesSummary.total_units_sold} units`}
-              icon={Package}
-              tint="blue"
-            />
-            <StatCard
-              label="Distinct Items Sold"
-              value={isSellLoading ? "..." : `${salesSummary.total_products_sold} items`}
-              icon={Boxes}
-              tint="purple"
-            />
-            <StatCard
-              label="Sales Orders / Invoices"
-              value={isSellLoading ? "..." : `${salesSummary.total_transactions} orders`}
-              icon={TrendingDown}
-              tint="indigo"
-            />
-            <StatCard
-              label="Top Category"
-              value={isSellLoading ? "..." : salesSummary.top_category || "—"}
-              icon={Layers}
-              tint="amber"
-            />
-          </div>
-
-          <div className="flex items-center gap-2">
-            <Calendar size={14} className="text-slate-400 shrink-0" />
-            <Select
-              value={sellDatePreset}
-              onChange={handleDatePreset}
-              options={PERIOD_OPTIONS}
-              className="w-auto min-w-40 text-xs py-1.5"
-            />
-          </div>
-
-          {/* 3. Toolbar: Search, Category Filter, Custom Date Pickers, & CSV Export */}
-          <Toolbar
-            action={
+          {/* 1. Primary 3-Filter Control Bar (Warehouse, Product, Time Duration) */}
+          <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-3.5">
+            <div className="flex items-center justify-between flex-wrap gap-2 pb-2.5 border-b border-slate-100 dark:border-slate-800 text-xs">
               <div className="flex items-center gap-2">
+                <div className="w-6 h-6 rounded-md bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 flex items-center justify-center font-bold text-xs">
+                  <Filter size={14} />
+                </div>
+                <div>
+                  <span className="font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider text-xs">
+                    Stock Sell 3-Filter System
+                  </span>
+                  <span className="text-slate-400 dark:text-slate-500 font-medium ml-1.5 hidden sm:inline text-[11px]">
+                    (1. Warehouse • 2. Product • 3. Time Duration)
+                  </span>
+                </div>
+              </div>
+
+              {/* Active Filter Badges */}
+              <div className="flex items-center gap-1.5 flex-wrap text-[11px] font-mono">
+                <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300 font-semibold border border-blue-200 dark:border-blue-800">
+                  🏢 WH: {sellWarehouseFilter === "all" ? "All Warehouses" : (myWarehouses.find(w => String(w.id) === String(sellWarehouseFilter))?.name || "Selected WH")}
+                </span>
+                <span className="px-2 py-0.5 rounded bg-purple-50 text-purple-700 dark:bg-purple-950/50 dark:text-purple-300 font-semibold border border-purple-200 dark:border-purple-800">
+                  📦 Product: {sellProductId === "all" ? "All Products" : (reportProducts.find(p => String(p.id) === String(sellProductId))?.name || "Selected Product")}
+                </span>
+                <span className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 font-semibold border border-emerald-200 dark:border-emerald-800">
+                  📅 {sellDatePreset === "all" ? "All Time" : (PERIOD_OPTIONS.find(o => o.value === sellDatePreset)?.label || "Custom Date")}
+                </span>
+              </div>
+            </div>
+
+            {/* The 3 Core Dropdowns */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              {/* Filter 1: Warehouse */}
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                  <Building2 size={13} className="text-blue-600" />
+                  <span>1. Warehouse Filter *</span>
+                </label>
+                <Select
+                  value={sellWarehouseFilter}
+                  onChange={(v) => {
+                    setSellWarehouseFilter(v);
+                    setSellPage(1);
+                  }}
+                  options={[
+                    { value: "all", label: "🏢 All Warehouses (Global View)" },
+                    ...myWarehouses.map((w) => ({
+                      value: String(w.id),
+                      label: `${w.name} (${w.code || "WH"})`,
+                    })),
+                  ]}
+                  className="w-full text-xs font-semibold"
+                />
+                <span className="text-[10px] text-slate-400 block">
+                  Select specific warehouse to isolate local sales
+                </span>
+              </div>
+
+              {/* Filter 2: Product */}
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                  <Package size={13} className="text-purple-600" />
+                  <span>2. Product Filter *</span>
+                </label>
+                <Select
+                  value={sellProductId}
+                  onChange={(v) => {
+                    setSellProductId(v);
+                    setSellPage(1);
+                  }}
+                  options={[
+                    { value: "all", label: "📦 All Products (Consolidated Summary)" },
+                    ...reportProducts.map((p) => ({
+                      value: String(p.id),
+                      label: `${p.name}${p.product_code ? ` (${p.product_code})` : ""}`,
+                    })),
+                  ]}
+                  className="w-full text-xs font-semibold"
+                />
+                <span className="text-[10px] text-slate-400 block">
+                  Pick any product to see its unit price, sold units &amp; revenue
+                </span>
+              </div>
+
+              {/* Filter 3: Time Duration */}
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                  <Calendar size={13} className="text-emerald-600" />
+                  <span>3. Time Duration *</span>
+                </label>
+                <Select
+                  value={sellDatePreset}
+                  onChange={handleDatePreset}
+                  options={PERIOD_OPTIONS}
+                  className="w-full text-xs font-semibold"
+                />
+                <span className="text-[10px] text-slate-400 block">
+                  {sellDateFrom && sellDateTo
+                    ? `${formatBDDate(sellDateFrom)} to ${formatBDDate(sellDateTo)}`
+                    : "Preset sales period range"}
+                </span>
+              </div>
+            </div>
+
+            {/* Secondary Toolbar: Search, Category, Custom Date Picker, Reset */}
+            <div className="flex flex-wrap items-center justify-between gap-2.5 pt-2.5 border-t border-slate-100 dark:border-slate-800">
+              <div className="flex-1 min-w-[240px]">
+                <SearchBox
+                  placeholder="Quick search by product name, barcode, SKU, invoice ref, customer..."
+                  value={sellSearch}
+                  onChange={(v) => { setSellSearch(v); setSellPage(1); }}
+                />
+              </div>
+
+              <div className="flex items-center gap-2 flex-wrap">
+                <Select
+                  value={sellCategoryFilter}
+                  onChange={(v) => {
+                    setSellCategoryFilter(v);
+                    setSellPage(1);
+                  }}
+                  options={[
+                    { value: "", label: "All Categories" },
+                    ...productCategories.map((c) => ({ value: String(c.id), label: c.name })),
+                  ]}
+                  className="w-auto min-w-36 text-xs py-1.5"
+                />
+
+                <DateRangeFilter
+                  fromDate={sellDateFrom}
+                  toDate={sellDateTo}
+                  onFromDateChange={(v) => {
+                    setSellDateFrom(v);
+                    setSellDatePreset("custom");
+                    setSellPage(1);
+                  }}
+                  onToDateChange={(v) => {
+                    setSellDateTo(v);
+                    setSellDatePreset("custom");
+                    setSellPage(1);
+                  }}
+                />
+
+                {(sellWarehouseFilter !== "all" || sellProductId !== "all" || sellCategoryFilter || sellSearch || sellDatePreset !== "all" || sellDateFrom || sellDateTo) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSellWarehouseFilter("all");
+                      setSellProductId("all");
+                      setSellCategoryFilter("");
+                      setSellSearch("");
+                      setSellDatePreset("all");
+                      setSellDateFrom("");
+                      setSellDateTo("");
+                      setSellPage(1);
+                    }}
+                    className="text-xs font-semibold text-rose-600 hover:text-rose-800 dark:text-rose-400 hover:underline px-2 py-1 transition-colors cursor-pointer"
+                  >
+                    Reset All Filters
+                  </button>
+                )}
+
+                {/* CSV Export Button */}
                 {sellViewMode === "item_summary" ? (
                   <ExportCSVButton
                     filename={`Stock_Sell_Item_Summary_${sellDateFrom || "all"}_to_${sellDateTo || "now"}`}
@@ -1465,6 +1626,7 @@ export function ReportsPage({ initialReport = "stock_summary" }) {
                       { label: "Unit Selling Price (BDT)", key: "unit_price" },
                       { label: "Total Units Sold", key: "total_units_sold" },
                       { label: "Total Sales Amount (BDT)", key: "total_sales_value" },
+                      { label: "Current Stock", key: "current_stock" },
                       { label: "Warehouses", value: (p) => (p.warehouse_names || []).join(", ") },
                     ]}
                   />
@@ -1492,56 +1654,122 @@ export function ReportsPage({ initialReport = "stock_summary" }) {
                   />
                 )}
               </div>
-            }
-          >
-            <SearchBox
-              placeholder="Search product, SKU, invoice, customer..."
-              value={sellSearch}
-              onChange={(v) => { setSellSearch(v); setSellPage(1); }}
-            />
-            <ReportIdentityFilters
-              products={reportProducts}
-              productId={sellProductId}
-              barcode={sellBarcode}
-              name={sellName}
-              onProduct={(v) => { setSellProductId(v); setSellPage(1); }}
-              onBarcode={(v) => { setSellBarcode(v); setSellPage(1); }}
-              onName={(v) => { setSellName(v); setSellPage(1); }}
-            />
-
-            {/* Category Dropdown */}
-            <div className="flex items-center gap-1.5">
-              <Filter size={14} className="text-slate-400 shrink-0" />
-              <Select
-                value={sellCategoryFilter}
-                onChange={(v) => {
-                  setSellCategoryFilter(v);
-                  setSellPage(1);
-                }}
-                options={[
-                  { value: "", label: "All Categories" },
-                  ...productCategories.map((c) => ({ value: String(c.id), label: c.name })),
-                ]}
-                className="w-auto min-w-40 text-xs py-1.5"
-              />
             </div>
+          </div>
 
-            {/* Custom Date Range Filter */}
-            <DateRangeFilter
-              fromDate={sellDateFrom}
-              toDate={sellDateTo}
-              onFromDateChange={(v) => {
-                setSellDateFrom(v);
-                setSellDatePreset("custom");
-                setSellPage(1);
-              }}
-              onToDateChange={(v) => {
-                setSellDateTo(v);
-                setSellDatePreset("custom");
-                setSellPage(1);
-              }}
+          {/* 2. Spotlight Banner for Single Selected Product (If Filter 2 is active) */}
+          {selectedProductItem && (
+            <div className="p-4 bg-gradient-to-r from-blue-50/90 via-indigo-50/60 to-purple-50/90 dark:from-slate-900 dark:via-indigo-950/30 dark:to-slate-900 border-2 border-indigo-200 dark:border-indigo-800 rounded-xl shadow-xs space-y-3">
+              <div className="flex items-center justify-between flex-wrap gap-2 pb-2 border-b border-indigo-200/60 dark:border-slate-800">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300 flex items-center justify-center font-bold">
+                    <Package size={18} />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                      <span>{selectedProductItem.product_name}</span>
+                      {selectedProductItem.product_code && (
+                        <span className="text-xs font-mono font-semibold px-2 py-0.5 rounded bg-indigo-100 text-indigo-800 dark:bg-indigo-900/60 dark:text-indigo-200 border border-indigo-200 dark:border-indigo-800">
+                          {selectedProductItem.product_code}
+                        </span>
+                      )}
+                      <Badge color={selectedProductItem.tracking_type === "serialized" ? "blue" : "emerald"}>
+                        {selectedProductItem.tracking_type}
+                      </Badge>
+                    </h3>
+                    <span className="text-xs text-slate-500 dark:text-slate-400">
+                      Category: <strong>{selectedProductItem.category_name}</strong> • Isolated Sales Performance Overview
+                    </span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setSellProductId("all")}
+                  className="text-xs font-semibold text-indigo-700 dark:text-indigo-300 hover:underline cursor-pointer"
+                >
+                  ✕ Show All Products
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
+                <div className="p-3 bg-white dark:bg-slate-800/80 rounded-lg border border-slate-200 dark:border-slate-700">
+                  <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wide block">
+                    Per Unit Price
+                  </span>
+                  <span className="text-lg font-bold font-mono text-slate-900 dark:text-slate-100 my-0.5 block">
+                    {formatBDT(selectedProductItem.unit_price)}
+                  </span>
+                  <span className="text-[10px] text-slate-400 block">Unit Selling Price</span>
+                </div>
+
+                <div className="p-3 bg-white dark:bg-slate-800/80 rounded-lg border border-slate-200 dark:border-slate-700">
+                  <span className="text-[11px] font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wide block">
+                    Total Units Sold
+                  </span>
+                  <span className="text-lg font-bold font-mono text-blue-700 dark:text-blue-300 my-0.5 block">
+                    {selectedProductItem.total_units_sold} units
+                  </span>
+                  <span className="text-[10px] text-blue-500/80 block">Dispatched to customers</span>
+                </div>
+
+                <div className="p-3 bg-white dark:bg-slate-800/80 rounded-lg border border-slate-200 dark:border-slate-700">
+                  <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wide block">
+                    Total Sales Value
+                  </span>
+                  <span className="text-lg font-bold font-mono text-emerald-700 dark:text-emerald-300 my-0.5 block">
+                    {formatBDT(selectedProductItem.total_sales_value)}
+                  </span>
+                  <span className="text-[10px] text-emerald-600/80 block font-mono">
+                    = {selectedProductItem.total_units_sold} units × {formatBDT(selectedProductItem.unit_price)}
+                  </span>
+                </div>
+
+                <div className="p-3 bg-white dark:bg-slate-800/80 rounded-lg border border-slate-200 dark:border-slate-700">
+                  <span className="text-[11px] font-bold text-purple-600 dark:text-purple-400 uppercase tracking-wide block">
+                    Remaining In Stock
+                  </span>
+                  <span className="text-lg font-bold font-mono text-purple-700 dark:text-purple-300 my-0.5 block">
+                    {selectedProductItem.current_stock ?? 0} units
+                  </span>
+                  <span className="text-[10px] text-purple-500/80 block">Available in warehouse</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* 3. Sales Summary KPI Cards */}
+          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3.5">
+            <StatCard
+              label="Total Sales Value"
+              value={isSellLoading ? "..." : formatBDT(salesSummary.total_sales_amount)}
+              icon={DollarSign}
+              tint="emerald"
             />
-          </Toolbar>
+            <StatCard
+              label="Total Units Sold"
+              value={isSellLoading ? "..." : `${salesSummary.total_units_sold} units`}
+              icon={Package}
+              tint="blue"
+            />
+            <StatCard
+              label="Avg Unit Price"
+              value={isSellLoading ? "..." : formatBDT(salesSummary.avg_unit_price || (salesSummary.total_units_sold > 0 ? (salesSummary.total_sales_amount / salesSummary.total_units_sold) : 0))}
+              icon={DollarSign}
+              tint="indigo"
+            />
+            <StatCard
+              label="Distinct Items Sold"
+              value={isSellLoading ? "..." : `${salesSummary.total_products_sold} items`}
+              icon={Boxes}
+              tint="purple"
+            />
+            <StatCard
+              label="Sales Orders / Invoices"
+              value={isSellLoading ? "..." : `${salesSummary.total_transactions} orders`}
+              icon={TrendingDown}
+              tint="amber"
+            />
+          </div>
 
           {/* 4. View Mode Tabs */}
           <div className="flex border-b border-slate-200 dark:border-slate-800 gap-2">
@@ -1554,7 +1782,7 @@ export function ReportsPage({ initialReport = "stock_summary" }) {
                   : "border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
               }`}
             >
-              📊 Item &amp; Category Summary ({productBreakdown.length} items sold)
+              📊 Item Sales Summary ({productBreakdown.length} items)
             </button>
             <button
               type="button"
@@ -1565,7 +1793,7 @@ export function ReportsPage({ initialReport = "stock_summary" }) {
                   : "border-transparent text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
               }`}
             >
-              🧾 Sales Orders &amp; Dispatches ({totalSales} records)
+              🧾 Sales Orders &amp; Invoices ({totalSales} records)
             </button>
             <button
               type="button"
@@ -1581,7 +1809,7 @@ export function ReportsPage({ initialReport = "stock_summary" }) {
           </div>
 
           {/* ────────────────────────────────────────────────────────────────── */}
-          {/* TAB 1: ITEM & CATEGORY SUMMARY TABLE (User's primary requirement)   */}
+          {/* TAB 1: ITEM SUMMARY TABLE (Per Unit Price, Units Sold, Total Sales)  */}
           {/* ────────────────────────────────────────────────────────────────── */}
           {sellViewMode === "item_summary" && (
             <Card>
@@ -1595,7 +1823,8 @@ export function ReportsPage({ initialReport = "stock_summary" }) {
                       <Th className="text-right">Unit Price</Th>
                       <Th className="text-right">Units Sold</Th>
                       <Th className="text-right">Total Sales Value</Th>
-                      <Th className="w-36">Sales Share</Th>
+                      <Th className="text-right">Available Stock</Th>
+                      <Th className="w-32">Sales Share</Th>
                       <Th>Sold From Warehouse(s)</Th>
                       <Th className="text-right">Actions</Th>
                     </tr>
@@ -1603,12 +1832,12 @@ export function ReportsPage({ initialReport = "stock_summary" }) {
                   <tbody>
                     {isSellLoading ? (
                       <tr>
-                        <td colSpan={9} className="text-center py-10 text-sm text-slate-400">
+                        <td colSpan={10} className="text-center py-10 text-sm text-slate-400">
                           Calculating sales summary by item and category...
                         </td>
                       </tr>
                     ) : productBreakdown.length === 0 ? (
-                      <EmptyTable cols={9} message="No sales records found for the selected date range and warehouse." />
+                      <EmptyTable cols={10} message="No sales records found for the selected warehouse, product, and time duration." />
                     ) : (
                       productBreakdown.map((item, idx) => {
                         const totalAmount = salesSummary.total_sales_amount || 1;
@@ -1639,17 +1868,31 @@ export function ReportsPage({ initialReport = "stock_summary" }) {
                             <Td>
                               <Badge color="blue">{item.category_name || "General"}</Badge>
                             </Td>
-                            <Td className="text-right font-mono text-xs text-slate-700 dark:text-slate-300">
+                            <Td className="text-right font-mono text-xs font-semibold text-slate-800 dark:text-slate-200">
                               {formatBDT(item.unit_price)}
                             </Td>
                             <Td className="text-right">
-                              <span className="font-mono font-bold text-sm text-slate-900 dark:text-slate-100 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-md">
+                              <span className="font-mono font-bold text-sm text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800/60 px-2.5 py-1 rounded-md">
                                 {item.total_units_sold} units
                               </span>
                             </Td>
                             <Td className="text-right">
-                              <span className="font-mono font-bold text-sm text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 px-2.5 py-1 rounded-md">
+                              <span
+                                className="font-mono font-bold text-sm text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/60 px-2.5 py-1 rounded-md"
+                                title={`Calculation: ${item.total_units_sold} units × ${formatBDT(item.unit_price)}`}
+                              >
                                 {formatBDT(item.total_sales_value)}
+                              </span>
+                            </Td>
+                            <Td className="text-right">
+                              <span
+                                className={`font-mono text-xs font-semibold px-2 py-0.5 rounded-full border ${
+                                  (item.current_stock ?? 0) > 0
+                                    ? "bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/40 dark:text-purple-300"
+                                    : "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300"
+                                }`}
+                              >
+                                {item.current_stock ?? 0} in stock
                               </span>
                             </Td>
                             <Td>
@@ -1705,13 +1948,13 @@ export function ReportsPage({ initialReport = "stock_summary" }) {
                         <td colSpan={4} className="py-3 px-4 text-slate-700 dark:text-slate-300">
                           Total Period Summary ({productBreakdown.length} items sold):
                         </td>
-                        <td className="py-3 px-4 text-right font-mono text-sm text-slate-900 dark:text-slate-100">
+                        <td className="py-3 px-4 text-right font-mono text-sm text-blue-700 dark:text-blue-400">
                           {salesSummary.total_units_sold} units
                         </td>
                         <td className="py-3 px-4 text-right font-mono text-sm text-emerald-700 dark:text-emerald-400">
                           {formatBDT(salesSummary.total_sales_amount)}
                         </td>
-                        <td colSpan={3} className="py-3 px-4 text-slate-400 text-right">
+                        <td colSpan={4} className="py-3 px-4 text-slate-400 text-right">
                           100% of reported sales
                         </td>
                       </tr>

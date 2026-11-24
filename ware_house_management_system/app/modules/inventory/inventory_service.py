@@ -1484,9 +1484,63 @@ class InventoryService:
             category_agg[cat_name]["total_units_sold"] += qty
             category_agg[cat_name]["total_sales_value"] += line_total
 
+        # If filtered by specific product but no sales occurred, ensure product details are still returned
+        if product_id and product_id not in product_agg:
+            single_p = self.db.query(Product).filter(Product.id == product_id).first()
+            if single_p:
+                cat_id = single_p.category_id
+                cat_obj = categories.get(cat_id) if cat_id else None
+                cat_name = cat_obj.name if cat_obj else (single_p.category.name if single_p.category else "General")
+                u_price = 0.0
+                if getattr(single_p, "variants", None):
+                    for pv in single_p.variants:
+                        if pv.selling_price is not None:
+                            u_price = float(pv.selling_price)
+                            break
+                product_agg[single_p.id] = {
+                    "product_id": single_p.id,
+                    "product_name": single_p.name,
+                    "product_code": single_p.product_code,
+                    "category_id": cat_id,
+                    "category_name": cat_name,
+                    "tracking_type": single_p.tracking_type.value if hasattr(single_p.tracking_type, "value") else "bulk",
+                    "unit_price": u_price,
+                    "total_units_sold": 0,
+                    "total_sales_value": 0.0,
+                    "warehouses": set(),
+                }
+                product_ids.add(single_p.id)
+
+        # Precompute current stock in warehouse(s) for the aggregated products
+        from app.models.inventory import BulkWarehouseStock, ItemStatus
+        bulk_map = {}
+        if product_ids:
+            bulk_q = self.db.query(BulkWarehouseStock).filter(BulkWarehouseStock.product_id.in_(product_ids))
+            if warehouse_id:
+                bulk_q = bulk_q.filter(BulkWarehouseStock.warehouse_id == warehouse_id)
+            elif allowed_warehouse_ids is not None:
+                bulk_q = bulk_q.filter(BulkWarehouseStock.warehouse_id.in_(allowed_warehouse_ids))
+            for b in bulk_q.all():
+                bulk_map[b.product_id] = bulk_map.get(b.product_id, 0) + (b.quantity or 0)
+
+        si_map = {}
+        if product_ids:
+            si_q = self.db.query(SerializedItem).filter(
+                SerializedItem.product_id.in_(product_ids),
+                SerializedItem.status == ItemStatus.IN_STOCK,
+            )
+            if warehouse_id:
+                si_q = si_q.filter(SerializedItem.warehouse_id == warehouse_id)
+            elif allowed_warehouse_ids is not None:
+                si_q = si_q.filter(SerializedItem.warehouse_id.in_(allowed_warehouse_ids))
+            for s_item in si_q.all():
+                si_map[s_item.product_id] = si_map.get(s_item.product_id, 0) + 1
+
         # Format sorted breakdowns
         product_breakdown = []
         for p_data in product_agg.values():
+            stock_qty = si_map.get(p_data["product_id"], 0) if p_data["tracking_type"] == "serialized" else bulk_map.get(p_data["product_id"], 0)
+            avg_u_price = round(p_data["total_sales_value"] / p_data["total_units_sold"], 2) if p_data["total_units_sold"] > 0 else p_data["unit_price"]
             product_breakdown.append({
                 "product_id": p_data["product_id"],
                 "product_name": p_data["product_name"],
@@ -1494,9 +1548,11 @@ class InventoryService:
                 "category_id": p_data["category_id"],
                 "category_name": p_data["category_name"],
                 "tracking_type": p_data["tracking_type"],
-                "unit_price": p_data["unit_price"],
+                "unit_price": p_data["unit_price"] or avg_u_price,
+                "avg_unit_price": avg_u_price,
                 "total_units_sold": p_data["total_units_sold"],
                 "total_sales_value": round(p_data["total_sales_value"], 2),
+                "current_stock": stock_qty,
                 "warehouse_names": sorted(list(p_data["warehouses"])),
             })
         product_breakdown.sort(key=lambda x: x["total_sales_value"], reverse=True)
@@ -1583,12 +1639,14 @@ class InventoryService:
             })
 
         total_pages = math.ceil(total_transactions / page_size) if total_transactions > 0 else 1
+        avg_price = round(total_sales_amount / total_units_sold, 2) if total_units_sold > 0 else 0.0
 
         return {
             "summary": {
                 "total_sales_amount": round(total_sales_amount, 2),
                 "total_units_sold": total_units_sold,
-                "total_products_sold": len(product_agg),
+                "avg_unit_price": avg_price,
+                "total_products_sold": len([p for p in product_agg.values() if p["total_units_sold"] > 0]) or len(product_agg),
                 "total_transactions": total_transactions,
                 "top_category": top_cat,
                 "top_product": top_prod,

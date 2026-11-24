@@ -37,7 +37,7 @@ export function Sidebar({ nav, currentUser, onLogout }) {
                   <NavLink
                     key={item.id}
                     to={item.path}
-                    end={item.path === "/"}
+                    end={item.end ?? true}
                     className={({ isActive }) =>
                       `w-full flex items-center gap-2.5 px-2.5 py-2 rounded-md text-sm mb-0.5 transition-colors ${
                         isActive ? "bg-slate-800 text-white" : "text-slate-400 hover:bg-slate-800/60 hover:text-slate-200"
