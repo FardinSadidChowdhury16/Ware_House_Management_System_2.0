@@ -411,6 +411,9 @@ function NewStockOutModal({ isOpen, onClose, onSuccess, warehouses, customers, p
           variant_sku: res.variant_sku,
           variant_name: res.variant_name,
           tracking_type: res.tracking_type || "bulk",
+          allocated_project_id: res.allocated_project_id || null,
+          allocated_project_name: res.allocated_project_name || null,
+          allocated_project_code: res.allocated_project_code || null,
           available_stock: avail,
           quantity: 1,
         };
@@ -787,8 +790,16 @@ function NewStockOutModal({ isOpen, onClose, onSuccess, warehouses, customers, p
             
             <div className="space-y-3">
               {items.map((item, index) => {
+                const isCrossProject = Boolean(
+                  item.allocated_project_id && (
+                    destinationType === "customer" ||
+                    (destinationType === "project" && projectId && String(item.allocated_project_id) !== String(projectId))
+                  )
+                );
                 return (
-                  <div key={item.id} className="p-3.5 bg-white rounded-lg border border-slate-200 shadow-sm space-y-3">
+                  <div key={item.id} className={`p-3.5 bg-white rounded-lg border shadow-sm space-y-3 transition-colors ${
+                    isCrossProject ? "border-rose-300 ring-1 ring-rose-200" : "border-slate-200"
+                  }`}>
                     <div className="flex items-center justify-between border-b border-slate-100 pb-2">
                       <span className="text-xs font-semibold text-slate-700">Line Item #{index + 1}</span>
                       {items.length > 1 && (
@@ -859,13 +870,27 @@ function NewStockOutModal({ isOpen, onClose, onSuccess, warehouses, customers, p
                       /* Exact Product Verified Card */
                       <div className="space-y-2.5">
                         <div className={`p-3 border rounded-lg flex items-center justify-between gap-3 flex-wrap ${
-                          (item.available_stock ?? 0) > 0 ? "bg-emerald-50/70 border-emerald-200" : "bg-rose-50/70 border-rose-200"
+                          (item.available_stock ?? 0) <= 0
+                            ? "bg-rose-50/70 border-rose-200"
+                            : isCrossProject
+                            ? "bg-amber-50/40 border-rose-300"
+                            : "bg-emerald-50/70 border-emerald-200"
                         }`}>
                           <div className="flex items-center gap-2.5 min-w-0">
                             <div className={`w-7 h-7 rounded-full flex items-center justify-center font-bold text-xs shrink-0 ${
-                              (item.available_stock ?? 0) > 0 ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700"
+                              (item.available_stock ?? 0) <= 0
+                                ? "bg-rose-100 text-rose-700"
+                                : isCrossProject
+                                ? "bg-amber-100 text-amber-800"
+                                : "bg-emerald-100 text-emerald-700"
                             }`}>
-                              {(item.available_stock ?? 0) > 0 ? <Check size={14} /> : <AlertCircle size={14} />}
+                              {(item.available_stock ?? 0) <= 0 ? (
+                                <AlertCircle size={14} />
+                              ) : isCrossProject ? (
+                                <AlertCircle size={14} className="text-rose-600" />
+                              ) : (
+                                <Check size={14} />
+                              )}
                             </div>
                             <div className="min-w-0">
                               <div className="font-semibold text-slate-900 text-sm flex items-center gap-2 flex-wrap">
@@ -889,6 +914,13 @@ function NewStockOutModal({ isOpen, onClose, onSuccess, warehouses, customers, p
                                 {item.variant_name && <span>Item: <strong className="text-slate-900 font-semibold">{item.variant_name}</strong></span>}
                                 {item.barcode && <span>Barcode: <strong>{item.barcode}</strong></span>}
                                 {item.serial_number && <span>SN: <strong className="text-blue-700 bg-blue-50 px-1 py-0.5 rounded border border-blue-200">{item.serial_number}</strong></span>}
+                                {item.allocated_project_name && (
+                                  <span className={`px-1.5 py-0.5 rounded border text-[11px] font-semibold flex items-center gap-1 ${
+                                    isCrossProject ? "bg-rose-100 text-rose-800 border-rose-300" : "bg-indigo-50 text-indigo-700 border-indigo-200"
+                                  }`}>
+                                    {isCrossProject ? "⚠️ Earmarked:" : "Allocated:"} {item.allocated_project_name}
+                                  </span>
+                                )}
                               </div>
                             </div>
                           </div>
@@ -902,6 +934,29 @@ function NewStockOutModal({ isOpen, onClose, onSuccess, warehouses, customers, p
                             Change Barcode
                           </button>
                         </div>
+
+                        {/* Cross-Project Reallocation Warning */}
+                        {isCrossProject && (
+                          <div className="flex items-start gap-2.5 text-xs text-rose-900 bg-rose-50/90 p-3 rounded-lg border-2 border-rose-300 font-medium">
+                            <AlertCircle size={17} className="shrink-0 text-rose-600 mt-0.5" />
+                            <div className="space-y-0.5">
+                              <div className="font-bold flex items-center gap-1.5 text-rose-900 text-xs">
+                                <span className="inline-block w-2 h-2 rounded-full bg-rose-600 animate-pulse"></span>
+                                Cross-Project Reallocation Detected
+                              </div>
+                              <p className="text-rose-700 leading-relaxed">
+                                This unit was originally stocked in / earmarked for project <strong className="text-rose-900 underline underline-offset-2">{item.allocated_project_name || `Project #${item.allocated_project_id}`}</strong>{item.allocated_project_code ? ` (${item.allocated_project_code})` : ""}. Dispatching it to <strong className="text-rose-900">{destinationType === "customer" ? (customerName || "this customer") : (projects.find(p => String(p.id) === String(projectId))?.name || "another project")}</strong> will reallocate it and record a cross-project transfer.
+                              </p>
+                            </div>
+                          </div>
+                        )}
+
+                        {item.allocated_project_id && !isCrossProject && (
+                          <div className="flex items-center gap-2 text-xs text-indigo-800 bg-indigo-50/90 px-3 py-2 rounded-lg border border-indigo-200">
+                            <Check size={14} className="shrink-0 text-indigo-600" />
+                            <span>Earmarked for this project: <strong>{item.allocated_project_name}</strong>{item.allocated_project_code ? ` (${item.allocated_project_code})` : ""}</span>
+                          </div>
+                        )}
 
                         {/* If out of stock in this warehouse */}
                         {item.available_stock !== null && item.available_stock <= 0 && (
@@ -1168,12 +1223,26 @@ export function StockOutPage() {
                               {m.project_code}
                             </span>
                           )}
+                          {m.is_cross_project && (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200 mt-0.5" title={`Originally earmarked for ${m.allocated_project_name || "another project"}`}>
+                              <AlertCircle size={10} className="shrink-0 text-rose-600" />
+                              Reallocated from: {m.allocated_project_name || "Project"}
+                            </span>
+                          )}
                         </div>
                       ) : m.customer_name ? (
-                        <span className="font-medium text-slate-700 flex items-center gap-1">
-                          <UserCheck size={12} className="shrink-0 text-slate-400" />
-                          {m.customer_name}
-                        </span>
+                        <div className="flex flex-col items-start gap-0.5">
+                          <span className="font-medium text-slate-700 flex items-center gap-1">
+                            <UserCheck size={12} className="shrink-0 text-slate-400" />
+                            {m.customer_name}
+                          </span>
+                          {m.is_cross_project && (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200 mt-0.5" title={`Originally earmarked for ${m.allocated_project_name || "another project"}`}>
+                              <AlertCircle size={10} className="shrink-0 text-rose-600" />
+                              Reallocated from: {m.allocated_project_name || "Project"}
+                            </span>
+                          )}
+                        </div>
                       ) : (
                         <span className="text-slate-400">—</span>
                       )}

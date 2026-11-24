@@ -311,6 +311,13 @@ export function ProjectViewModal({ project, isOpen, onClose, getStatusBadge = de
                                 {isIn ? <ArrowDownLeft size={11} /> : <ArrowUpRight size={11} />}
                                 {isIn ? "Stock In" : "Stock Out"}
                               </span>
+                              {item.is_cross_project && (
+                                <div className="mt-1">
+                                  <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800 whitespace-nowrap" title={`Originally allocated to ${item.allocated_project_name || "Another Project"}`}>
+                                    ⚠️ Reallocated
+                                  </span>
+                                </div>
+                              )}
                             </td>
                             <td className="py-2 px-3">
                               <div className="font-semibold text-slate-800 dark:text-slate-200">

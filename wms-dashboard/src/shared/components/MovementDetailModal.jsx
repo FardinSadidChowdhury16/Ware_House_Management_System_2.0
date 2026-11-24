@@ -15,6 +15,7 @@ import {
   ArrowUpRight,
   Wrench,
   FolderKanban,
+  AlertCircle,
 } from "lucide-react";
 import { Badge, GhostButton, Modal } from "../../components/ui/index.js";
 import { httpClient } from "../../core/api/httpClient.js";
@@ -239,6 +240,24 @@ export function MovementDetailModal({ movement, direction, onClose }) {
         }
       >
         <div className="space-y-4">
+          {/* Cross-Project Reallocation Alert */}
+          {movement.is_cross_project && (
+            <div className="flex items-start gap-2.5 rounded-lg border-2 border-rose-300 bg-rose-50/90 p-3.5 text-xs text-rose-900 shadow-xs">
+              <AlertCircle size={18} className="shrink-0 text-rose-600 mt-0.5" />
+              <div className="space-y-0.5">
+                <span className="block font-bold text-rose-900 text-sm">
+                  ⚠️ Cross-Project Reallocation Detected
+                </span>
+                <p className="text-rose-700 leading-relaxed">
+                  This unit was originally stocked in / allocated to project{" "}
+                  <strong className="text-rose-900 font-semibold">{movement.allocated_project_name || `Project #${movement.allocated_project_id}`}</strong>
+                  {movement.allocated_project_code ? ` (${movement.allocated_project_code})` : ""}, but was dispatched to{" "}
+                  <strong className="text-rose-900 font-semibold">{partyName || "another destination"}</strong>.
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Key Info Grid */}
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 rounded-lg border border-slate-200 bg-slate-50 p-3.5 text-xs">
             <div>

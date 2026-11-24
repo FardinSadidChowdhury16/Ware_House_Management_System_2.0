@@ -151,6 +151,7 @@ class ProjectRepository:
             variant = self.db.query(ProductVariant).filter(ProductVariant.id == m.variant_id).first() if m.variant_id else None
             user = self.db.query(User).filter(User.id == m.created_by).first() if m.created_by else None
             serialized_item = self.db.query(SerializedItem).filter(SerializedItem.id == m.product_item_id).first() if m.product_item_id else None
+            alloc_proj = self.db.query(Project).filter(Project.id == m.allocated_project_id).first() if getattr(m, "allocated_project_id", None) else None
 
             if serialized_item:
                 recorded_serials_or_items.add(serialized_item.id)
@@ -216,6 +217,10 @@ class ProjectRepository:
                 "dispatched_by_id": m.created_by,
                 "dispatched_by_name": user.name if user else None,
                 "dispatched_at": m.created_at,
+                "allocated_project_id": getattr(m, "allocated_project_id", None),
+                "allocated_project_name": alloc_proj.name if alloc_proj else None,
+                "allocated_project_code": alloc_proj.code if alloc_proj else None,
+                "is_cross_project": bool(getattr(m, "is_cross_project", False)),
             })
 
         direct_serials = (
@@ -228,6 +233,7 @@ class ProjectRepository:
                 product = self.db.query(Product).filter(Product.id == s.product_id).first()
                 variant = self.db.query(ProductVariant).filter(ProductVariant.id == s.variant_id).first() if s.variant_id else None
                 wh = self.db.query(Warehouse).filter(Warehouse.id == s.warehouse_id).first() if s.warehouse_id else None
+                alloc_p = self.db.query(Project).filter(Project.id == s.allocated_project_id).first() if getattr(s, "allocated_project_id", None) else None
                 total_in_quantity += 1
                 items_list.append({
                     "id": f"si-{s.id}",
@@ -252,6 +258,10 @@ class ProjectRepository:
                     "dispatched_by_id": None,
                     "dispatched_by_name": "Direct Allocation",
                     "dispatched_at": s.created_at,
+                    "allocated_project_id": getattr(s, "allocated_project_id", None),
+                    "allocated_project_name": alloc_p.name if alloc_p else None,
+                    "allocated_project_code": alloc_p.code if alloc_p else None,
+                    "is_cross_project": False,
                 })
 
         return {

@@ -358,6 +358,10 @@ def barcode_lookup(
         wh_name = wh.name if wh else "Unassigned / None"
         status_val = serial_item.status.value if hasattr(serial_item.status, "value") else str(serial_item.status)
 
+        from app.models.project import Project
+        alloc_pid = getattr(serial_item, "allocated_project_id", None) or serial_item.project_id
+        alloc_proj = db.query(Project).filter(Project.id == alloc_pid).first() if alloc_pid else None
+
         # ─── IF STOCK IN: Check if already assigned or stocked in! ─────────────
         if purpose == "stock_in":
             return {
@@ -418,6 +422,9 @@ def barcode_lookup(
                 "variant_name": variant.name if variant else None,
                 "barcode": serial_item.barcode or barcode_clean,
                 "available_stock": 1,
+                "allocated_project_id": alloc_proj.id if alloc_proj else None,
+                "allocated_project_name": alloc_proj.name if alloc_proj else None,
+                "allocated_project_code": alloc_proj.code if alloc_proj else None,
             }
 
         # General lookup
@@ -436,6 +443,9 @@ def barcode_lookup(
             "variant_name": variant.name if variant else None,
             "barcode": serial_item.barcode or barcode_clean,
             "assigned_warehouse_name": wh_name,
+            "allocated_project_id": alloc_proj.id if alloc_proj else None,
+            "allocated_project_name": alloc_proj.name if alloc_proj else None,
+            "allocated_project_code": alloc_proj.code if alloc_proj else None,
             "available_stock": _get_stock(product.id, serial_item.variant_id, True) if product else 0,
         }
 

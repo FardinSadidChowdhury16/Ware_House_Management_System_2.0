@@ -207,6 +207,7 @@ class InventoryService:
                         status=ItemStatus.IN_STOCK,
                         supplier_id=data.supplier_id,
                         project_id=data.project_id,
+                        allocated_project_id=data.project_id,
                         warranty_start=item.warranty_start,
                         warranty_end=item.warranty_end,
                     )
@@ -225,6 +226,8 @@ class InventoryService:
                         to_warehouse_id=data.warehouse_id,
                         supplier_id=data.supplier_id,
                         project_id=data.project_id,
+                        allocated_project_id=data.project_id,
+                        is_cross_project=False,
                         reference_type="purchase_in",
                         reference_id=ref_id,
                         note=combined_note,
@@ -250,6 +253,8 @@ class InventoryService:
                     to_warehouse_id=data.warehouse_id,
                     supplier_id=data.supplier_id,
                     project_id=data.project_id,
+                    allocated_project_id=data.project_id,
+                    is_cross_project=False,
                     reference_type="purchase_in",
                     reference_id=ref_id,
                     note=combined_note,
@@ -354,14 +359,28 @@ class InventoryService:
                     target_items.extend(available_items)
 
                 for si in target_items:
+                    orig_alloc_pid = getattr(si, "allocated_project_id", None) or si.project_id
+                    dest_pid = getattr(data, "project_id", None)
+                    is_cross = bool(orig_alloc_pid and orig_alloc_pid != dest_pid)
+
                     si.status = ItemStatus.SOLD
                     si.warehouse_id = None
                     if data.customer_id:
                         si.customer_id = data.customer_id
-                    if getattr(data, "project_id", None):
-                        si.project_id = data.project_id
+                    if dest_pid:
+                        si.project_id = dest_pid
+                    if orig_alloc_pid and not getattr(si, "allocated_project_id", None):
+                        si.allocated_project_id = orig_alloc_pid
                     self.db.add(si)
                     self.db.flush()
+
+                    item_note = combined_note
+                    if is_cross:
+                        from app.models.project import Project
+                        orig_p = self.db.query(Project).filter(Project.id == orig_alloc_pid).first()
+                        orig_name = f"{orig_p.name} ({orig_p.code})" if orig_p else f"Project #{orig_alloc_pid}"
+                        realloc_tag = f"[⚠️ Cross-Project Reallocation: Originally allocated to {orig_name}]"
+                        item_note = f"{realloc_tag} | {item_note}" if item_note else realloc_tag
 
                     mov_create = StockMovementCreate(
                         product_id=item.product_id,
@@ -371,10 +390,12 @@ class InventoryService:
                         quantity=1,
                         from_warehouse_id=data.warehouse_id,
                         customer_id=data.customer_id,
-                        project_id=getattr(data, "project_id", None),
+                        project_id=dest_pid,
+                        allocated_project_id=orig_alloc_pid,
+                        is_cross_project=is_cross,
                         reference_type="sale_out",
                         reference_id=ref_id,
-                        note=combined_note,
+                        note=item_note,
                         attachment_url=data.attachment_url,
                     )
                     self.repo.create_stock_movement(mov_create, valid_user_id)

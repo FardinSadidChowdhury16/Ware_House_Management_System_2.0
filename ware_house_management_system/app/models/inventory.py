@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, ForeignKey, DateTime, Enum, Date, UniqueConstraint, func
+from sqlalchemy import Column, Integer, String, Text, ForeignKey, DateTime, Enum, Date, UniqueConstraint, Boolean, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 from app.core.database import Base
@@ -43,6 +43,7 @@ class SerializedItem(Base):
     supplier_id = Column(Integer, ForeignKey("suppliers.id", ondelete="SET NULL"), nullable=True, index=True)
     customer_id = Column(Integer, ForeignKey("customers.id", ondelete="SET NULL"), nullable=True, index=True)
     project_id = Column(Integer, ForeignKey("projects.id", ondelete="SET NULL"), nullable=True, index=True)
+    allocated_project_id = Column(Integer, ForeignKey("projects.id", ondelete="SET NULL"), nullable=True, index=True)
     warranty_start = Column(Date, nullable=True)
     warranty_end = Column(Date, nullable=True)
     description = Column(Text, nullable=True)
@@ -131,6 +132,8 @@ class StockMovement(Base):
     supplier_id = Column(Integer, ForeignKey("suppliers.id", ondelete="SET NULL"), nullable=True, index=True)
     customer_id = Column(Integer, ForeignKey("customers.id", ondelete="SET NULL"), nullable=True, index=True)
     project_id = Column(Integer, ForeignKey("projects.id", ondelete="SET NULL"), nullable=True, index=True)
+    allocated_project_id = Column(Integer, ForeignKey("projects.id", ondelete="SET NULL"), nullable=True, index=True)
+    is_cross_project = Column(Boolean, default=False, nullable=True, index=True)
     reference_type = Column(String(50), nullable=True)
     reference_id = Column(Integer, nullable=True)
     note = Column(Text, nullable=True)

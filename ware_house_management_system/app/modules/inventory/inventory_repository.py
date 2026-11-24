@@ -387,6 +387,7 @@ class InventoryRepository:
             supplier = self.db.query(Supplier).filter(Supplier.id == m.supplier_id).first() if m.supplier_id else None
             customer = self.db.query(Customer).filter(Customer.id == m.customer_id).first() if m.customer_id else None
             project = self.db.query(Project).filter(Project.id == m.project_id).first() if getattr(m, "project_id", None) else None
+            alloc_proj = self.db.query(Project).filter(Project.id == m.allocated_project_id).first() if getattr(m, "allocated_project_id", None) else None
             serialized_item = self.db.query(SerializedItem).filter(SerializedItem.id == m.product_item_id).first() if m.product_item_id else None
             creator = self.db.query(User).filter(User.id == m.created_by).first() if m.created_by else None
 
@@ -452,6 +453,10 @@ class InventoryRepository:
                 "project_id": getattr(m, "project_id", None),
                 "project_name": project.name if project else None,
                 "project_code": project.code if project else None,
+                "allocated_project_id": getattr(m, "allocated_project_id", None),
+                "allocated_project_name": alloc_proj.name if alloc_proj else None,
+                "allocated_project_code": alloc_proj.code if alloc_proj else None,
+                "is_cross_project": bool(getattr(m, "is_cross_project", False)),
                 "reference_type": m.reference_type,
                 "reference_id": m.reference_id,
                 "reference_number": ref_number,

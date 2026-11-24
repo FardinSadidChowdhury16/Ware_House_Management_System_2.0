@@ -69,6 +69,8 @@ class StockMovementCreate(BaseModel):
     supplier_id: Optional[int] = None
     customer_id: Optional[int] = None
     project_id: Optional[int] = None
+    allocated_project_id: Optional[int] = None
+    is_cross_project: Optional[bool] = False
     reference_type: Optional[str] = None
     reference_id: Optional[int] = None
     note: Optional[str] = None
@@ -163,6 +165,9 @@ class ItemLookupResponse(BaseModel):
     serial_number: Optional[str] = None
     current_warehouse_id: Optional[int] = None
     current_warehouse_name: Optional[str] = None
+    allocated_project_id: Optional[int] = None
+    allocated_project_name: Optional[str] = None
+    allocated_project_code: Optional[str] = None
     status: Optional[str] = None
     available_qty: int = 0
     in_source_warehouse: bool = False
@@ -198,6 +203,10 @@ class StockMovementListItem(BaseModel):
     project_id: Optional[int] = None
     project_name: Optional[str] = None
     project_code: Optional[str] = None
+    allocated_project_id: Optional[int] = None
+    allocated_project_name: Optional[str] = None
+    allocated_project_code: Optional[str] = None
+    is_cross_project: Optional[bool] = False
     reference_type: Optional[str] = None
     reference_id: Optional[Any] = None
     reference_number: Optional[str] = None
