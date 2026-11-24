@@ -9,6 +9,7 @@ import {
   ArrowDownLeft,
   ArrowUpRight,
   Boxes,
+  Calculator,
 } from "lucide-react";
 import {
   Modal,
@@ -194,39 +195,72 @@ export function ProjectViewModal({ project, isOpen, onClose, getStatusBadge = de
 
         {activeTab !== "info" ? (
           <div className="space-y-3">
-            {/* Quick Metrics */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-              <div className="p-3 bg-emerald-50/70 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900/40 rounded-lg">
-                <span className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400 uppercase tracking-wide block">
-                  Total Received (Stock In +)
-                </span>
-                <span className="text-xl font-bold text-emerald-900 dark:text-emerald-100 font-mono">
-                  {loading ? "..." : `+${totalIn}`}
-                </span>
+            {/* Quick Metrics & Calculation Formula */}
+            <div className="bg-slate-50/80 dark:bg-slate-900/60 p-3 rounded-xl border border-slate-200 dark:border-slate-800 space-y-2">
+              <div className="flex items-center justify-between flex-wrap gap-2 text-xs">
+                <div className="flex items-center gap-1.5 font-bold text-slate-700 dark:text-slate-300">
+                  <Calculator size={13} className="text-blue-600 dark:text-blue-400" />
+                  <span className="uppercase tracking-wider text-[11px]">Stock Balance Equation</span>
+                </div>
+                <div className="text-[11px] font-mono text-slate-500 dark:text-slate-400 bg-white dark:bg-slate-800 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700">
+                  Formula: <strong className="text-emerald-700 dark:text-emerald-400">Stock In (+)</strong> − <strong className="text-amber-700 dark:text-amber-400">Stock Out (−)</strong> = <strong className="text-purple-700 dark:text-purple-400">Remaining</strong>
+                </div>
               </div>
-              <div className="p-3 bg-amber-50/70 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/40 rounded-lg">
-                <span className="text-[11px] font-medium text-amber-600 dark:text-amber-400 uppercase tracking-wide block">
-                  Total Dispatched (Stock Out -)
-                </span>
-                <span className="text-xl font-bold text-amber-900 dark:text-amber-100 font-mono">
-                  {loading ? "..." : `-${totalOut}`}
-                </span>
-              </div>
-              <div className="p-3 bg-purple-50/70 dark:bg-purple-950/20 border border-purple-200 dark:border-purple-900/40 rounded-lg">
-                <span className="text-[11px] font-medium text-purple-600 dark:text-purple-400 uppercase tracking-wide block">
-                  Remaining
-                </span>
-                <span className="text-xl font-bold text-purple-900 dark:text-purple-100 font-mono">
-                  {loading ? "..." : netBalance}
-                </span>
-              </div>
-              <div className="p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg">
-                <span className="text-[11px] font-medium text-slate-500 uppercase tracking-wide block">
-                  Site Location
-                </span>
-                <span className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate block">
-                  {project.location || "—"}
-                </span>
+
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5 items-stretch">
+                <div className="p-2.5 bg-emerald-50/80 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-lg flex sm:flex-col items-center justify-between sm:justify-center text-center">
+                  <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-300 uppercase block">
+                    Received (Stock In +)
+                  </span>
+                  <span className="text-xl font-bold text-emerald-950 dark:text-emerald-100 font-mono my-0.5">
+                    {loading ? "..." : `+${totalIn}`}
+                  </span>
+                  <span className="text-[10px] text-emerald-600/80 dark:text-emerald-400/80 block">
+                    Assigned to this project
+                  </span>
+                </div>
+
+                <div className="relative p-2.5 bg-amber-50/80 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg flex sm:flex-col items-center justify-between sm:justify-center text-center">
+                  <span className="hidden sm:flex absolute -left-3.5 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-white dark:bg-slate-800 border-2 border-amber-300 dark:border-amber-700 items-center justify-center text-xs font-extrabold text-amber-600 shadow-xs z-10">
+                    −
+                  </span>
+                  <span className="text-[10px] font-bold text-amber-700 dark:text-amber-300 uppercase block">
+                    Dispatched (Stock Out −)
+                  </span>
+                  <span className="text-xl font-bold text-amber-950 dark:text-amber-100 font-mono my-0.5">
+                    {loading ? "..." : `-${totalOut}`}
+                  </span>
+                  <span className="text-[10px] text-amber-600/80 dark:text-amber-400/80 block">
+                    Used or transferred out
+                  </span>
+                </div>
+
+                <div className="relative p-2.5 bg-purple-50/90 dark:bg-purple-950/40 border-2 border-purple-300 dark:border-purple-700 rounded-lg shadow-xs flex sm:flex-col items-center justify-between sm:justify-center text-center">
+                  <span className="hidden sm:flex absolute -left-3.5 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-white dark:bg-slate-800 border-2 border-purple-300 dark:border-purple-700 items-center justify-center text-xs font-extrabold text-purple-700 shadow-xs z-10">
+                    =
+                  </span>
+                  <span className="text-[10px] font-bold text-purple-800 dark:text-purple-300 uppercase block">
+                    Remaining In Stock
+                  </span>
+                  <span className="text-xl font-bold text-purple-950 dark:text-purple-100 font-mono my-0.5">
+                    {loading ? "..." : netBalance}
+                  </span>
+                  <span className="text-[10px] text-purple-700/80 dark:text-purple-300/80 font-medium block">
+                    Current active on site
+                  </span>
+                </div>
+
+                <div className="p-2.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg flex sm:flex-col items-center justify-between sm:justify-center text-center">
+                  <span className="text-[10px] font-medium text-slate-500 uppercase block">
+                    Site Location
+                  </span>
+                  <span className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate block my-1">
+                    {project.location || "—"}
+                  </span>
+                  <span className="text-[10px] text-slate-400 block">
+                    Assigned physical site
+                  </span>
+                </div>
               </div>
             </div>
 
