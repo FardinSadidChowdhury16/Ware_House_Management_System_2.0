@@ -481,16 +481,10 @@ class ProductsRepository:
     def create_product_with_variants(self, product_in: ProductCreate) -> Product:
         from sqlalchemy.exc import IntegrityError
 
-        is_auto_code = not (product_in.product_code and product_in.product_code.strip())
-        max_attempts = 5 if is_auto_code else 1
-
+        max_attempts = 5
         product = None
         for attempt in range(max_attempts):
-            code = (
-                product_in.product_code.strip()
-                if not is_auto_code
-                else self.generate_next_product_code()
-            )
+            code = self.generate_next_product_code()
             product = Product(
                 name=product_in.name,
                 product_code=code,

@@ -2209,7 +2209,8 @@ export function ProductsPage() {
           <table className="w-full">
             <thead>
               <tr>
-                <Th>Product Code &amp; Name</Th>
+                <Th className="w-32">Product Code</Th>
+                <Th>Product Name</Th>
                 <Th>Category</Th>
                 <Th>Tracking</Th>
                 <Th>Items</Th>
@@ -2221,19 +2222,17 @@ export function ProductsPage() {
               {filtered.map((p) => (
                 <tr key={p.id} className="hover:bg-slate-50/50">
                   <Td>
-                    <div className="flex items-center gap-2.5">
-                      {p.product_code && (
-                        <span
-                          className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200 tracking-wider shrink-0"
-                          title="Product Code"
-                        >
-                          {p.product_code}
-                        </span>
-                      )}
-                      <span className="font-medium text-slate-900 text-sm">
-                        {p.name}
-                      </span>
-                    </div>
+                    <span
+                      className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200 tracking-wider inline-block"
+                      title="Product Code"
+                    >
+                      {p.product_code || "—"}
+                    </span>
+                  </Td>
+                  <Td>
+                    <span className="font-medium text-slate-900 text-sm">
+                      {p.name}
+                    </span>
                   </Td>
                   <Td>
                     <Badge color="slate">{p.category}</Badge>
@@ -2306,7 +2305,7 @@ export function ProductsPage() {
               ))}
               {filtered.length === 0 && (
                 <EmptyTable
-                  cols={6}
+                  cols={7}
                   message={
                     isLoading || isFetching
                       ? "Loading products..."
