@@ -556,6 +556,11 @@ function NewStockInModal({ isOpen, onClose, onSuccess, warehouses, suppliers, de
                             </div>
                             <div className="min-w-0">
                               <div className="font-semibold text-slate-900 text-sm flex items-center gap-2 flex-wrap">
+                                {item.product_code && (
+                                  <span className="font-mono text-[11px] font-bold px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                    {item.product_code}
+                                  </span>
+                                )}
                                 <span>{item.product_name}</span>
                                 <Badge color={item.tracking_type === "serialized" ? "blue" : "emerald"}>
                                   {item.tracking_type === "serialized" ? "Serialized" : "Bulk"}
@@ -761,8 +766,14 @@ export function StockInPage() {
                       {formatBDDateTime(m.created_at)}
                     </Td>
                     <Td>
-                      <div className="font-medium text-slate-800">{m.product_name || `Product #${m.product_id}`}</div>
-                      {m.product_code && <div className="text-[11px] text-slate-400 font-mono">{m.product_code}</div>}
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {m.product_code && (
+                          <span className="font-mono text-[11px] font-bold px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200 shrink-0">
+                            {m.product_code}
+                          </span>
+                        )}
+                        <span className="font-medium text-slate-800">{m.product_name || `Product #${m.product_id}`}</span>
+                      </div>
                     </Td>
                     <Td mono className="text-xs text-slate-900 font-medium">
                       {m.variant_sku || (m.variant_name ? m.variant_name : "—")}

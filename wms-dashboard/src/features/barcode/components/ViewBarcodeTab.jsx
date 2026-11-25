@@ -892,13 +892,19 @@ export function ViewBarcodeTab() {
                         {row.serial_number || "—"}
                       </Td>
 
-                      {/* Product Name & SKU */}
+                      {/* Product Name & Code */}
                       <Td>
-                        <div className="font-semibold text-slate-800">{row.product_name}</div>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          {row.sku && (
+                            <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200 shrink-0">
+                              {row.sku}
+                            </span>
+                          )}
+                          <span className="font-semibold text-slate-800">{row.product_name}</span>
+                        </div>
                         {row.variant_name && (
-                          <div className="text-xs font-semibold text-slate-900">{row.variant_name}</div>
+                          <div className="text-xs font-semibold text-slate-900 mt-0.5">{row.variant_name}</div>
                         )}
-                        <div className="text-[10px] text-slate-400 font-mono">{row.sku}</div>
                       </Td>
 
                       {/* Warehouse */}

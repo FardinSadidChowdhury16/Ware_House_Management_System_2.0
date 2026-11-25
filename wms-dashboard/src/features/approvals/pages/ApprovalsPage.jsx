@@ -54,7 +54,10 @@ function PayloadSummary({ payload }) {
 
   const previewNames = items
     .slice(0, 2)
-    .map((it) => it.product_name || it.item_name || (it.product_id ? `Product #${it.product_id}` : null))
+    .map((it) => {
+      const pName = it.product_name || it.item_name || (it.product_id ? `Product #${it.product_id}` : null);
+      return pName && it.product_code ? `[${it.product_code}] ${pName}` : pName;
+    })
     .filter(Boolean)
     .join(", ");
   const extraCount = itemCount > 2 ? ` +${itemCount - 2} more` : "";

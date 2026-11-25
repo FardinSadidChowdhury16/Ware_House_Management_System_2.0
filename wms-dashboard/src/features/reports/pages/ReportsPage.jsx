@@ -1154,8 +1154,15 @@ export function ReportsPage({ initialReport = "stock_summary" }) {
                           <MovementBadge type={m.movement_type} />
                         </Td>
                         <Td>
-                          <div className="text-sm font-semibold text-slate-800">
-                            {m.product_name || `Product #${m.product_id}`}
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            {m.product_code && (
+                              <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200 shrink-0">
+                                {m.product_code}
+                              </span>
+                            )}
+                            <span className="text-sm font-semibold text-slate-800">
+                              {m.product_name || `Product #${m.product_id}`}
+                            </span>
                           </div>
                           {(m.variant_name || m.variant_sku) && (
                             <span className="text-[11px] text-slate-500 font-mono">
@@ -2172,9 +2179,16 @@ export function ReportsPage({ initialReport = "stock_summary" }) {
                           {ticket.received_date ? formatBDDate(ticket.received_date) : "—"}
                         </Td>
                         <Td>
-                          <span className="text-sm font-medium text-slate-900 dark:text-slate-100">
-                            {ticket.product_name}
-                          </span>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            {ticket.product_code && (
+                              <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200 shrink-0">
+                                {ticket.product_code}
+                              </span>
+                            )}
+                            <span className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                              {ticket.product_name}
+                            </span>
+                          </div>
                           {ticket.item_name && (
                             <span className="block text-[11px] text-slate-500">{ticket.item_name}</span>
                           )}
@@ -2240,8 +2254,13 @@ export function ReportsPage({ initialReport = "stock_summary" }) {
             <Building2 className="text-blue-600" size={18} />
             <span>Sold From Warehouses</span>
             {viewingWarehouseItem && (
-              <span className="text-xs font-normal text-slate-500">
-                — {viewingWarehouseItem.product_name}
+              <span className="text-xs font-normal text-slate-500 flex items-center gap-1.5">
+                — {viewingWarehouseItem.product_code && (
+                  <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200">
+                    {viewingWarehouseItem.product_code}
+                  </span>
+                )}
+                <span>{viewingWarehouseItem.product_name}</span>
               </span>
             )}
           </div>

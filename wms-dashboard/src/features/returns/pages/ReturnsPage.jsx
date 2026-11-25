@@ -1018,7 +1018,14 @@ function TicketDetailModal({ ticket, onClose, onUpdated, onDelete }) {
               <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mb-1">
                 Battery / Product
               </p>
-              <p className="text-sm font-semibold text-slate-900">{currentTicket.product_name}</p>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {currentTicket.product_code && (
+                  <span className="font-mono text-xs font-bold px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200">
+                    {currentTicket.product_code}
+                  </span>
+                )}
+                <p className="text-sm font-semibold text-slate-900">{currentTicket.product_name}</p>
+              </div>
               {currentTicket.item_name && (
                 <p className="text-xs text-slate-500 mt-0.5">{currentTicket.item_name}</p>
               )}
@@ -1694,9 +1701,16 @@ export function ReturnsPage() {
                     </Td>
 
                     <Td>
-                      <p className="font-medium text-slate-900 leading-tight">
-                        {t.product_name}
-                      </p>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {t.product_code && (
+                          <span className="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200 shrink-0">
+                            {t.product_code}
+                          </span>
+                        )}
+                        <p className="font-medium text-slate-900 leading-tight">
+                          {t.product_name}
+                        </p>
+                      </div>
                       {t.item_name && (
                         <p className="text-xs text-slate-500 mt-0.5">{t.item_name}</p>
                       )}

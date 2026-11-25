@@ -86,6 +86,11 @@ function WarrantyDetailModal({ warranty, onClose }) {
         <div className="p-3 bg-slate-50 border border-slate-200 rounded-lg flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Package size={16} className="text-slate-500" />
+            {warranty.product_code && (
+              <span className="font-mono text-xs font-bold px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200">
+                {warranty.product_code}
+              </span>
+            )}
             <span className="font-semibold text-slate-800 text-sm">
               {warranty.product_name || "Product"}
             </span>

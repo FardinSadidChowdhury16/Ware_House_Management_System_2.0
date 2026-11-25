@@ -245,6 +245,7 @@ class ServicesRepository:
             "product_id": ticket.product_id,
             "variant_id": ticket.variant_id,
             "product_name": ticket.product_name,
+            "product_code": ticket.product.product_code if getattr(ticket, "product", None) else None,
             "item_name": ticket.item_name,
             "warehouse_id": ticket.warehouse_id,
             "warehouse_name": ticket.warehouse.name if ticket.warehouse else None,

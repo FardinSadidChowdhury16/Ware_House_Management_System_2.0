@@ -183,7 +183,14 @@ function ProjectDetailModal({ isOpen, onClose, projectId, projects }) {
                     <tbody className="divide-y divide-slate-100">
                       {itemsData.items.map((i, idx) => (
                         <tr key={i.id || idx}>
-                          <td className="py-1 px-2 font-medium text-slate-800">{i.product_name}</td>
+                          <td className="py-1 px-2 font-medium text-slate-800">
+                            {i.product_code && (
+                              <span className="font-mono text-[10px] font-bold px-1 py-0.2 rounded bg-indigo-50 text-indigo-700 border border-indigo-200 mr-1.5">
+                                {i.product_code}
+                              </span>
+                            )}
+                            {i.product_name}
+                          </td>
                           <td className="py-1 px-2 font-mono text-[10px] text-slate-500">{i.serial_number || i.barcode || "—"}</td>
                           <td className="py-1 px-2 text-right font-mono font-bold text-rose-600">-{i.quantity}</td>
                         </tr>
@@ -894,6 +901,11 @@ function NewStockOutModal({ isOpen, onClose, onSuccess, warehouses, customers, p
                             </div>
                             <div className="min-w-0">
                               <div className="font-semibold text-slate-900 text-sm flex items-center gap-2 flex-wrap">
+                                {item.product_code && (
+                                  <span className="font-mono text-[11px] font-bold px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200">
+                                    {item.product_code}
+                                  </span>
+                                )}
                                 <span>{item.product_name}</span>
                                 <Badge color={item.tracking_type === "serialized" ? "blue" : "emerald"}>
                                   {item.tracking_type === "serialized" ? "Serialized" : "Bulk"}
