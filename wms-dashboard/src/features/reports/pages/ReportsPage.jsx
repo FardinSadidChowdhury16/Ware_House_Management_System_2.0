@@ -6,6 +6,7 @@ import {
   ArrowLeftRight,
   AlertTriangle,
   TrendingDown,
+  TrendingUp,
   Building2,
   Search,
   Eye,
@@ -116,10 +117,10 @@ function MovementBadge({ type }) {
   return <Badge color={item.color}>{item.label}</Badge>;
 }
 
-// ─── Currency Formatter (Bangladeshi Taka ৳) ──────────────────────────────────
+// ─── Amount Formatter (Number only, without currency symbol) ────────────────
 function formatBDT(amount) {
   const num = Number(amount) || 0;
-  return `৳ ${num.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  return num.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 // ─── Date Range Presets Helper ───────────────────────────────────────────────
@@ -618,16 +619,15 @@ export function ReportsPage({ initialReport = "stock_summary" }) {
   const [servicePage, setServicePage] = useState(1);
   const SERVICE_PAGE_SIZE = 20;
 
-  // Stock Sell Report 3-Filter States
-  const [sellWarehouseFilter, setSellWarehouseFilter] = useState("all");
+  // Stock Sell Report Filter States
   const [sellProductId, setSellProductId] = useState("all");
   const [sellSearch, setSellSearch] = useState("");
-  const [sellCategoryFilter, setSellCategoryFilter] = useState("");
   const [sellDatePreset, setSellDatePreset] = useState("all");
   const [sellDateFrom, setSellDateFrom] = useState("");
   const [sellDateTo, setSellDateTo] = useState("");
   const [sellPage, setSellPage] = useState(1);
   const SELL_PAGE_SIZE = 12;
+  const [viewingWarehouseItem, setViewingWarehouseItem] = useState(null);
 
   // Product categories for the filter
   const { data: productCategories = [] } = useQuery({
@@ -643,23 +643,11 @@ export function ReportsPage({ initialReport = "stock_summary" }) {
   });
   const reportProducts = reportProductsResult?.items || [];
 
-  // Sync warehouse filter when header context changes
-  useEffect(() => {
-    if (selectedWarehouseId) {
-      setSellWarehouseFilter(String(selectedWarehouseId));
-    }
-  }, [selectedWarehouseId]);
-
-  const effectiveSellWhId = sellWarehouseFilter !== "all" 
-    ? Number(sellWarehouseFilter) 
-    : (selectedWarehouseId ? Number(selectedWarehouseId) : undefined);
-
   const sellParams = {
     page: sellPage,
     page_size: SELL_PAGE_SIZE,
-    warehouse_id: effectiveSellWhId,
+    warehouse_id: selectedWarehouseId ? Number(selectedWarehouseId) : undefined,
     product_id: sellProductId !== "all" ? Number(sellProductId) : undefined,
-    category_id: sellCategoryFilter ? Number(sellCategoryFilter) : undefined,
     date_from: sellDateFrom || undefined,
     date_to: sellDateTo || undefined,
     search: sellSearch.trim() || undefined,
@@ -1449,157 +1437,15 @@ export function ReportsPage({ initialReport = "stock_summary" }) {
       {/* ────────────────────────────────────────────────────────────────────── */}
       {activeReport === "stock_sell_report" && (
         <div className="space-y-4">
-          {/* 1. Primary 3-Filter Control Bar (Warehouse, Product, Time Duration) */}
-          <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-3.5">
-            <div className="flex items-center justify-between flex-wrap gap-2 pb-2.5 border-b border-slate-100 dark:border-slate-800 text-xs">
+          {/* 1. Single-Line Toolbar: Search (Left), Product, Time Duration Filters, Reset, & CSV Export */}
+          <Toolbar
+            action={
               <div className="flex items-center gap-2">
-                <div className="w-6 h-6 rounded-md bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 flex items-center justify-center font-bold text-xs">
-                  <Filter size={14} />
-                </div>
-                <div>
-                  <span className="font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider text-xs">
-                    Stock Sell 3-Filter System
-                  </span>
-                  <span className="text-slate-400 dark:text-slate-500 font-medium ml-1.5 hidden sm:inline text-[11px]">
-                    (1. Warehouse • 2. Product • 3. Time Duration)
-                  </span>
-                </div>
-              </div>
-
-              {/* Active Filter Badges */}
-              <div className="flex items-center gap-1.5 flex-wrap text-[11px] font-mono">
-                <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300 font-semibold border border-blue-200 dark:border-blue-800">
-                  🏢 WH: {sellWarehouseFilter === "all" ? "All Warehouses" : (myWarehouses.find(w => String(w.id) === String(sellWarehouseFilter))?.name || "Selected WH")}
-                </span>
-                <span className="px-2 py-0.5 rounded bg-purple-50 text-purple-700 dark:bg-purple-950/50 dark:text-purple-300 font-semibold border border-purple-200 dark:border-purple-800">
-                  📦 Product: {sellProductId === "all" ? "All Products" : (reportProducts.find(p => String(p.id) === String(sellProductId))?.name || "Selected Product")}
-                </span>
-                <span className="px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 font-semibold border border-emerald-200 dark:border-emerald-800">
-                  📅 {sellDatePreset === "all" ? "All Time" : (PERIOD_OPTIONS.find(o => o.value === sellDatePreset)?.label || "Custom Date")}
-                </span>
-              </div>
-            </div>
-
-            {/* The 3 Core Dropdowns */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              {/* Filter 1: Warehouse */}
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                  <Building2 size={13} className="text-blue-600" />
-                  <span>1. Warehouse Filter *</span>
-                </label>
-                <Select
-                  value={sellWarehouseFilter}
-                  onChange={(v) => {
-                    setSellWarehouseFilter(v);
-                    setSellPage(1);
-                  }}
-                  options={[
-                    { value: "all", label: "🏢 All Warehouses (Global View)" },
-                    ...myWarehouses.map((w) => ({
-                      value: String(w.id),
-                      label: `${w.name} (${w.code || "WH"})`,
-                    })),
-                  ]}
-                  className="w-full text-xs font-semibold"
-                />
-                <span className="text-[10px] text-slate-400 block">
-                  Select specific warehouse to isolate local sales
-                </span>
-              </div>
-
-              {/* Filter 2: Product */}
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                  <Package size={13} className="text-purple-600" />
-                  <span>2. Product Filter *</span>
-                </label>
-                <Select
-                  value={sellProductId}
-                  onChange={(v) => {
-                    setSellProductId(v);
-                    setSellPage(1);
-                  }}
-                  options={[
-                    { value: "all", label: "📦 All Products (Consolidated Summary)" },
-                    ...reportProducts.map((p) => ({
-                      value: String(p.id),
-                      label: `${p.name}${p.product_code ? ` (${p.product_code})` : ""}`,
-                    })),
-                  ]}
-                  className="w-full text-xs font-semibold"
-                />
-                <span className="text-[10px] text-slate-400 block">
-                  Pick any product to see its unit price, sold units &amp; revenue
-                </span>
-              </div>
-
-              {/* Filter 3: Time Duration */}
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                  <Calendar size={13} className="text-emerald-600" />
-                  <span>3. Time Duration *</span>
-                </label>
-                <Select
-                  value={sellDatePreset}
-                  onChange={handleDatePreset}
-                  options={PERIOD_OPTIONS}
-                  className="w-full text-xs font-semibold"
-                />
-                <span className="text-[10px] text-slate-400 block">
-                  {sellDateFrom && sellDateTo
-                    ? `${formatBDDate(sellDateFrom)} to ${formatBDDate(sellDateTo)}`
-                    : "Preset sales period range"}
-                </span>
-              </div>
-            </div>
-
-            {/* Secondary Toolbar: Search, Category, Custom Date Picker, Reset */}
-            <div className="flex flex-wrap items-center justify-between gap-2.5 pt-2.5 border-t border-slate-100 dark:border-slate-800">
-              <div className="flex-1 min-w-[240px]">
-                <SearchBox
-                  placeholder="Quick search by product name, barcode, SKU, invoice ref, customer..."
-                  value={sellSearch}
-                  onChange={(v) => { setSellSearch(v); setSellPage(1); }}
-                />
-              </div>
-
-              <div className="flex items-center gap-2 flex-wrap">
-                <Select
-                  value={sellCategoryFilter}
-                  onChange={(v) => {
-                    setSellCategoryFilter(v);
-                    setSellPage(1);
-                  }}
-                  options={[
-                    { value: "", label: "All Categories" },
-                    ...productCategories.map((c) => ({ value: String(c.id), label: c.name })),
-                  ]}
-                  className="w-auto min-w-36 text-xs py-1.5"
-                />
-
-                <DateRangeFilter
-                  fromDate={sellDateFrom}
-                  toDate={sellDateTo}
-                  onFromDateChange={(v) => {
-                    setSellDateFrom(v);
-                    setSellDatePreset("custom");
-                    setSellPage(1);
-                  }}
-                  onToDateChange={(v) => {
-                    setSellDateTo(v);
-                    setSellDatePreset("custom");
-                    setSellPage(1);
-                  }}
-                />
-
-                {(sellWarehouseFilter !== "all" || sellProductId !== "all" || sellCategoryFilter || sellSearch || sellDatePreset !== "all" || sellDateFrom || sellDateTo) && (
+                {(sellProductId !== "all" || sellSearch || sellDatePreset !== "all") && (
                   <button
                     type="button"
                     onClick={() => {
-                      setSellWarehouseFilter("all");
                       setSellProductId("all");
-                      setSellCategoryFilter("");
                       setSellSearch("");
                       setSellDatePreset("all");
                       setSellDateFrom("");
@@ -1608,11 +1454,10 @@ export function ReportsPage({ initialReport = "stock_summary" }) {
                     }}
                     className="text-xs font-semibold text-rose-600 hover:text-rose-800 dark:text-rose-400 hover:underline px-2 py-1 transition-colors cursor-pointer"
                   >
-                    Reset All Filters
+                    Reset
                   </button>
                 )}
 
-                {/* CSV Export Button */}
                 {sellViewMode === "item_summary" ? (
                   <ExportCSVButton
                     filename={`Stock_Sell_Item_Summary_${sellDateFrom || "all"}_to_${sellDateTo || "now"}`}
@@ -1623,7 +1468,6 @@ export function ReportsPage({ initialReport = "stock_summary" }) {
                       { label: "Product Code / SKU", key: "product_code" },
                       { label: "Category", key: "category_name" },
                       { label: "Tracking Type", key: "tracking_type" },
-                      { label: "Unit Selling Price (BDT)", key: "unit_price" },
                       { label: "Total Units Sold", key: "total_units_sold" },
                       { label: "Total Sales Amount (BDT)", key: "total_sales_value" },
                       { label: "Current Stock", key: "current_stock" },
@@ -1640,12 +1484,12 @@ export function ReportsPage({ initialReport = "stock_summary" }) {
                       { label: "Invoice / Reference #", key: "reference_number" },
                       { label: "Customer Name", key: "customer_name" },
                       { label: "Product Name", key: "product_name" },
+                      { label: "Item Name", value: (s) => s.item_name || s.variant_name || s.product_name || "—" },
                       { label: "Product Code", key: "product_code" },
                       { label: "Category", key: "category_name" },
                       { label: "Variant / SKU", value: (s) => s.variant_name || s.variant_sku || "—" },
                       { label: "Serial / Barcode", value: (s) => s.serial_number || s.barcode || "—" },
                       { label: "Quantity Dispatched", key: "quantity" },
-                      { label: "Unit Price (BDT)", key: "unit_price" },
                       { label: "Total Price (BDT)", key: "total_price" },
                       { label: "Source Warehouse", key: "from_warehouse_name" },
                       { label: "Sales Agent", key: "created_by_name" },
@@ -1654,8 +1498,47 @@ export function ReportsPage({ initialReport = "stock_summary" }) {
                   />
                 )}
               </div>
+            }
+          >
+            {/* Search on the Left */}
+            <SearchBox
+              placeholder="Search product, barcode, SKU, invoice, customer..."
+              value={sellSearch}
+              onChange={(v) => { setSellSearch(v); setSellPage(1); }}
+              className="min-w-56 max-w-xs"
+            />
+
+            {/* Product Filter */}
+            <div className="flex items-center gap-1.5">
+              <Package size={14} className="text-slate-400 shrink-0" />
+              <Select
+                value={sellProductId}
+                onChange={(v) => {
+                  setSellProductId(v);
+                  setSellPage(1);
+                }}
+                options={[
+                  { value: "all", label: "All Products" },
+                  ...reportProducts.map((p) => ({
+                    value: String(p.id),
+                    label: `${p.name}${p.product_code ? ` (${p.product_code})` : ""}`,
+                  })),
+                ]}
+                className="w-auto min-w-40 max-w-56 text-xs py-1.5"
+              />
             </div>
-          </div>
+
+            {/* Time Duration Filter */}
+            <div className="flex items-center gap-1.5">
+              <Calendar size={14} className="text-slate-400 shrink-0" />
+              <Select
+                value={sellDatePreset}
+                onChange={handleDatePreset}
+                options={SELL_PERIOD_OPTIONS}
+                className="w-auto min-w-32 text-xs py-1.5"
+              />
+            </div>
+          </Toolbar>
 
           {/* 2. Spotlight Banner for Single Selected Product (If Filter 2 is active) */}
           {selectedProductItem && (
@@ -1738,11 +1621,11 @@ export function ReportsPage({ initialReport = "stock_summary" }) {
           )}
 
           {/* 3. Sales Summary KPI Cards */}
-          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3.5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
             <StatCard
               label="Total Sales Value"
               value={isSellLoading ? "..." : formatBDT(salesSummary.total_sales_amount)}
-              icon={DollarSign}
+              icon={TrendingUp}
               tint="emerald"
             />
             <StatCard
@@ -1750,24 +1633,6 @@ export function ReportsPage({ initialReport = "stock_summary" }) {
               value={isSellLoading ? "..." : `${salesSummary.total_units_sold} units`}
               icon={Package}
               tint="blue"
-            />
-            <StatCard
-              label="Avg Unit Price"
-              value={isSellLoading ? "..." : formatBDT(salesSummary.avg_unit_price || (salesSummary.total_units_sold > 0 ? (salesSummary.total_sales_amount / salesSummary.total_units_sold) : 0))}
-              icon={DollarSign}
-              tint="indigo"
-            />
-            <StatCard
-              label="Distinct Items Sold"
-              value={isSellLoading ? "..." : `${salesSummary.total_products_sold} items`}
-              icon={Boxes}
-              tint="purple"
-            />
-            <StatCard
-              label="Sales Orders / Invoices"
-              value={isSellLoading ? "..." : `${salesSummary.total_transactions} orders`}
-              icon={TrendingDown}
-              tint="amber"
             />
           </div>
 
@@ -1820,7 +1685,6 @@ export function ReportsPage({ initialReport = "stock_summary" }) {
                       <Th className="w-12">#</Th>
                       <Th>Item / Product</Th>
                       <Th>Category</Th>
-                      <Th className="text-right">Unit Price</Th>
                       <Th className="text-right">Units Sold</Th>
                       <Th className="text-right">Total Sales Value</Th>
                       <Th className="text-right">Available Stock</Th>
@@ -1832,16 +1696,16 @@ export function ReportsPage({ initialReport = "stock_summary" }) {
                   <tbody>
                     {isSellLoading ? (
                       <tr>
-                        <td colSpan={10} className="text-center py-10 text-sm text-slate-400">
+                        <td colSpan={9} className="text-center py-10 text-sm text-slate-400">
                           Calculating sales summary by item and category...
                         </td>
                       </tr>
                     ) : productBreakdown.length === 0 ? (
-                      <EmptyTable cols={10} message="No sales records found for the selected warehouse, product, and time duration." />
+                      <EmptyTable cols={9} message="No sales records found for the selected warehouse, product, and time duration." />
                     ) : (
                       productBreakdown.map((item, idx) => {
-                        const totalAmount = salesSummary.total_sales_amount || 1;
-                        const sharePercent = ((item.total_sales_value / totalAmount) * 100).toFixed(1);
+                        const totalUnits = salesSummary.total_units_sold || 0;
+                        const sharePercent = totalUnits > 0 ? ((item.total_units_sold / totalUnits) * 100).toFixed(1) : "0.0";
                         return (
                           <tr key={item.product_id} className="hover:bg-slate-50/70 dark:hover:bg-slate-900/40">
                             <Td mono className="text-xs text-slate-400">
@@ -1868,12 +1732,9 @@ export function ReportsPage({ initialReport = "stock_summary" }) {
                             <Td>
                               <Badge color="blue">{item.category_name || "General"}</Badge>
                             </Td>
-                            <Td className="text-right font-mono text-xs font-semibold text-slate-800 dark:text-slate-200">
-                              {formatBDT(item.unit_price)}
-                            </Td>
                             <Td className="text-right">
                               <span className="font-mono font-bold text-sm text-blue-700 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800/60 px-2.5 py-1 rounded-md">
-                                {item.total_units_sold} units
+                                {item.total_units_sold}
                               </span>
                             </Td>
                             <Td className="text-right">
@@ -1910,18 +1771,17 @@ export function ReportsPage({ initialReport = "stock_summary" }) {
                             </Td>
                             <Td className="text-xs text-slate-600 dark:text-slate-400">
                               {item.warehouse_names && item.warehouse_names.length > 0 ? (
-                                <div className="flex flex-wrap gap-1">
-                                  {item.warehouse_names.map((wh) => (
-                                    <span
-                                      key={wh}
-                                      className="inline-flex items-center gap-1 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-1.5 py-0.5 rounded text-[11px]"
-                                    >
-                                      <Building2 size={10} /> {wh}
-                                    </span>
-                                  ))}
-                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => setViewingWarehouseItem(item)}
+                                  className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/50 hover:bg-blue-100 dark:hover:bg-blue-900/60 border border-blue-200 dark:border-blue-800 rounded-md transition-colors cursor-pointer"
+                                  title="View warehouse list"
+                                >
+                                  <Eye size={12} />
+                                  <span>View ({item.warehouse_names.length})</span>
+                                </button>
                               ) : (
-                                "—"
+                                <span className="text-slate-400 text-xs">—</span>
                               )}
                             </Td>
                             <Td className="text-right">
@@ -1945,11 +1805,11 @@ export function ReportsPage({ initialReport = "stock_summary" }) {
                   {productBreakdown.length > 0 && (
                     <tfoot className="bg-slate-50 dark:bg-slate-900/60 font-bold border-t border-slate-200 dark:border-slate-800 text-xs">
                       <tr>
-                        <td colSpan={4} className="py-3 px-4 text-slate-700 dark:text-slate-300">
+                        <td colSpan={3} className="py-3 px-4 text-slate-700 dark:text-slate-300">
                           Total Period Summary ({productBreakdown.length} items sold):
                         </td>
                         <td className="py-3 px-4 text-right font-mono text-sm text-blue-700 dark:text-blue-400">
-                          {salesSummary.total_units_sold} units
+                          {salesSummary.total_units_sold}
                         </td>
                         <td className="py-3 px-4 text-right font-mono text-sm text-emerald-700 dark:text-emerald-400">
                           {formatBDT(salesSummary.total_sales_amount)}
@@ -1978,11 +1838,11 @@ export function ReportsPage({ initialReport = "stock_summary" }) {
                       <Th>Date &amp; Time</Th>
                       <Th>Invoice / Reference</Th>
                       <Th>Customer</Th>
-                      <Th>Product &amp; SKU</Th>
+                      <Th>Product</Th>
+                      <Th>Item Name</Th>
                       <Th>Category</Th>
                       <Th>Serial / Barcode</Th>
                       <Th className="text-right">Qty</Th>
-                      <Th className="text-right">Unit Price</Th>
                       <Th className="text-right">Total Value</Th>
                       <Th>Dispatched From</Th>
                       <Th>Handled By</Th>
@@ -2019,9 +1879,19 @@ export function ReportsPage({ initialReport = "stock_summary" }) {
                             <div className="text-sm font-semibold text-slate-800 dark:text-slate-200">
                               {s.product_name || `Product #${s.product_id}`}
                             </div>
-                            {(s.variant_name || s.variant_sku) && (
+                            {s.product_code && (
                               <span className="text-[11px] font-mono text-slate-500">
-                                {s.variant_name || s.variant_sku}
+                                {s.product_code}
+                              </span>
+                            )}
+                          </Td>
+                          <Td>
+                            <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                              {s.item_name || s.variant_name || s.product_name || "—"}
+                            </div>
+                            {(s.variant_sku || s.variant_name) && (
+                              <span className="text-[11px] font-mono text-slate-500">
+                                {s.variant_sku || s.variant_name}
                               </span>
                             )}
                           </Td>
@@ -2043,9 +1913,6 @@ export function ReportsPage({ initialReport = "stock_summary" }) {
                             <span className="font-mono font-bold text-sm text-rose-700 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 px-2 py-0.5 rounded border border-rose-200 dark:border-rose-900">
                               -{s.quantity}
                             </span>
-                          </Td>
-                          <Td className="text-right font-mono text-xs text-slate-700 dark:text-slate-300">
-                            {formatBDT(s.unit_price)}
                           </Td>
                           <Td className="text-right">
                             <span className="font-mono font-bold text-xs text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-1.5 py-0.5 rounded border border-emerald-200 dark:border-emerald-800">
@@ -2123,7 +1990,7 @@ export function ReportsPage({ initialReport = "stock_summary" }) {
                               </div>
                             </Td>
                             <Td className="text-right font-mono font-semibold text-sm text-slate-800 dark:text-slate-200">
-                              {cat.total_units_sold} units
+                              {cat.total_units_sold}
                             </Td>
                             <Td className="text-right">
                               <span className="font-mono font-bold text-sm text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded border border-emerald-200 dark:border-emerald-800">
@@ -2363,6 +2230,59 @@ export function ReportsPage({ initialReport = "stock_summary" }) {
         item={detailItem}
         onClose={() => setDetailItem(null)}
       />
+
+      {/* Modal for viewing sold-from warehouses list */}
+      <Modal
+        open={!!viewingWarehouseItem}
+        onClose={() => setViewingWarehouseItem(null)}
+        title={
+          <div className="flex items-center gap-2">
+            <Building2 className="text-blue-600" size={18} />
+            <span>Sold From Warehouses</span>
+            {viewingWarehouseItem && (
+              <span className="text-xs font-normal text-slate-500">
+                — {viewingWarehouseItem.product_name}
+              </span>
+            )}
+          </div>
+        }
+        size="md"
+      >
+        <div className="space-y-4">
+          <div className="text-xs text-slate-500 dark:text-slate-400">
+            This product was dispatched / sold from the following{" "}
+            <strong className="text-slate-800 dark:text-slate-200">
+              {viewingWarehouseItem?.warehouse_names?.length || 0}
+            </strong>{" "}
+            warehouse location(s):
+          </div>
+
+          <div className="divide-y divide-slate-100 dark:divide-slate-800 border border-slate-200 dark:border-slate-800 rounded-lg overflow-hidden bg-white dark:bg-slate-900 max-h-72 overflow-y-auto">
+            {(!viewingWarehouseItem?.warehouse_names || viewingWarehouseItem.warehouse_names.length === 0) ? (
+              <div className="p-4 text-center text-xs text-slate-400">
+                No warehouse recorded for this item.
+              </div>
+            ) : (
+              viewingWarehouseItem.warehouse_names.map((whName, idx) => (
+                <div
+                  key={whName || idx}
+                  className="flex items-center gap-2.5 px-3.5 py-2.5 text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800/50"
+                >
+                  <span className="w-5 h-5 rounded-full bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 flex items-center justify-center font-bold text-[10px]">
+                    {idx + 1}
+                  </span>
+                  <Building2 size={14} className="text-blue-500 shrink-0" />
+                  <span className="font-medium flex-1">{whName}</span>
+                </div>
+              ))
+            )}
+          </div>
+
+          <div className="flex justify-end pt-2 border-t border-slate-100 dark:border-slate-800">
+            <GhostButton onClick={() => setViewingWarehouseItem(null)}>Close</GhostButton>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

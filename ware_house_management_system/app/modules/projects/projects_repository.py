@@ -119,6 +119,7 @@ class ProjectRepository:
         from app.models.product import Product, ProductVariant
         from app.models.warehouse import Warehouse
         from app.models.access_control import User
+        from app.models.party import Customer
         import re
 
         project = self.get_project_by_id(project_id)
@@ -129,22 +130,56 @@ class ProjectRepository:
                 "project_code": "—",
                 "total_items": 0,
                 "total_in_quantity": 0,
+                "own_out_quantity": 0,
+                "other_out_quantity": 0,
+                "received_reallocated_quantity": 0,
                 "total_out_quantity": 0,
                 "net_quantity": 0,
+                "product_summary": [],
                 "items": [],
             }
 
         movements = (
             self.db.query(StockMovement)
-            .filter(StockMovement.project_id == project_id)
+            .filter(
+                or_(
+                    StockMovement.project_id == project_id,
+                    StockMovement.allocated_project_id == project_id,
+                )
+            )
             .order_by(StockMovement.created_at.desc(), StockMovement.id.desc())
             .all()
         )
 
         items_list = []
         total_in_quantity = 0
+        own_out_quantity = 0
+        other_out_quantity = 0
+        received_reallocated_quantity = 0
         total_out_quantity = 0
         recorded_serials_or_items = set()
+        product_summary_map = {}
+
+        def ensure_prod_entry(pid, prod_obj):
+            if pid not in product_summary_map:
+                t_type = (
+                    prod_obj.tracking_type.value
+                    if (prod_obj and hasattr(prod_obj.tracking_type, "value"))
+                    else (str(prod_obj.tracking_type) if prod_obj else "bulk")
+                )
+                product_summary_map[pid] = {
+                    "product_id": pid,
+                    "product_name": prod_obj.name if prod_obj else f"Product #{pid}",
+                    "product_code": prod_obj.product_code if prod_obj else "—",
+                    "tracking_type": t_type,
+                    "stock_in_qty": 0,
+                    "own_out_qty": 0,
+                    "other_out_qty": 0,
+                    "total_out_qty": 0,
+                    "remaining_qty": 0,
+                    "other_destinations": set(),
+                }
+            return product_summary_map[pid]
 
         for m in movements:
             product = self.db.query(Product).filter(Product.id == m.product_id).first()
@@ -152,6 +187,8 @@ class ProjectRepository:
             user = self.db.query(User).filter(User.id == m.created_by).first() if m.created_by else None
             serialized_item = self.db.query(SerializedItem).filter(SerializedItem.id == m.product_item_id).first() if m.product_item_id else None
             alloc_proj = self.db.query(Project).filter(Project.id == m.allocated_project_id).first() if getattr(m, "allocated_project_id", None) else None
+            dest_proj = self.db.query(Project).filter(Project.id == m.project_id).first() if (m.project_id and m.project_id != project_id) else None
+            dest_cust = self.db.query(Customer).filter(Customer.id == m.customer_id).first() if m.customer_id else None
 
             if serialized_item:
                 recorded_serials_or_items.add(serialized_item.id)
@@ -189,15 +226,47 @@ class ProjectRepository:
             target_wh_id = m.to_warehouse_id if is_inbound else m.from_warehouse_id
             wh = self.db.query(Warehouse).filter(Warehouse.id == target_wh_id).first() if target_wh_id else None
 
+            m_alloc_pid = getattr(m, "allocated_project_id", None)
+            out_scope = "in"
+
             if is_inbound:
                 total_in_quantity += qty
+                if m.product_id:
+                    p_entry = ensure_prod_entry(m.product_id, product)
+                    p_entry["stock_in_qty"] += qty
             else:
-                total_out_quantity += qty
+                if m.project_id == project_id and (m_alloc_pid is None or m_alloc_pid == project_id):
+                    out_scope = "own"
+                    own_out_quantity += qty
+                    total_out_quantity += qty
+                    if m.product_id:
+                        p_entry = ensure_prod_entry(m.product_id, product)
+                        p_entry["own_out_qty"] += qty
+                        p_entry["total_out_qty"] += qty
+                elif m_alloc_pid == project_id and m.project_id != project_id:
+                    out_scope = "other"
+                    other_out_quantity += qty
+                    total_out_quantity += qty
+                    if m.product_id:
+                        p_entry = ensure_prod_entry(m.product_id, product)
+                        p_entry["other_out_qty"] += qty
+                        p_entry["total_out_qty"] += qty
+                        if dest_proj:
+                            p_entry["other_destinations"].add(f"{dest_proj.name} ({dest_proj.code})" if dest_proj.code else dest_proj.name)
+                        elif dest_cust:
+                            p_entry["other_destinations"].add(f"Customer: {dest_cust.name}")
+                        else:
+                            p_entry["other_destinations"].add("Other Destination")
+                else:
+                    # m.project_id == project_id and m_alloc_pid is a DIFFERENT project (received via reallocation)
+                    out_scope = "received_from_other"
+                    received_reallocated_quantity += qty
 
             items_list.append({
                 "id": m.id,
                 "movement_id": m.id,
                 "direction": direction,
+                "out_scope": out_scope,
                 "movement_type": mov_type_str,
                 "product_id": m.product_id,
                 "product_name": product.name if product else f"Product #{m.product_id}",
@@ -217,15 +286,24 @@ class ProjectRepository:
                 "dispatched_by_id": m.created_by,
                 "dispatched_by_name": user.name if user else None,
                 "dispatched_at": m.created_at,
-                "allocated_project_id": getattr(m, "allocated_project_id", None),
+                "allocated_project_id": m_alloc_pid,
                 "allocated_project_name": alloc_proj.name if alloc_proj else None,
                 "allocated_project_code": alloc_proj.code if alloc_proj else None,
-                "is_cross_project": bool(getattr(m, "is_cross_project", False)),
+                "destination_project_id": m.project_id,
+                "destination_project_name": dest_proj.name if dest_proj else (project.name if m.project_id == project_id else None),
+                "destination_project_code": dest_proj.code if dest_proj else (project.code if m.project_id == project_id else None),
+                "destination_customer_name": dest_cust.name if dest_cust else None,
+                "is_cross_project": bool(getattr(m, "is_cross_project", False)) or out_scope == "other",
             })
 
         direct_serials = (
             self.db.query(SerializedItem)
-            .filter(SerializedItem.project_id == project_id)
+            .filter(
+                or_(
+                    SerializedItem.project_id == project_id,
+                    SerializedItem.allocated_project_id == project_id,
+                )
+            )
             .all()
         )
         for s in direct_serials:
@@ -235,10 +313,14 @@ class ProjectRepository:
                 wh = self.db.query(Warehouse).filter(Warehouse.id == s.warehouse_id).first() if s.warehouse_id else None
                 alloc_p = self.db.query(Project).filter(Project.id == s.allocated_project_id).first() if getattr(s, "allocated_project_id", None) else None
                 total_in_quantity += 1
+                if s.product_id:
+                    p_entry = ensure_prod_entry(s.product_id, product)
+                    p_entry["stock_in_qty"] += 1
                 items_list.append({
                     "id": f"si-{s.id}",
                     "movement_id": None,
                     "direction": "in",
+                    "out_scope": "in",
                     "movement_type": "direct_allocation",
                     "product_id": s.product_id,
                     "product_name": product.name if product else f"Product #{s.product_id}",
@@ -261,8 +343,19 @@ class ProjectRepository:
                     "allocated_project_id": getattr(s, "allocated_project_id", None),
                     "allocated_project_name": alloc_p.name if alloc_p else None,
                     "allocated_project_code": alloc_p.code if alloc_p else None,
+                    "destination_project_id": None,
+                    "destination_project_name": None,
+                    "destination_project_code": None,
+                    "destination_customer_name": None,
                     "is_cross_project": False,
                 })
+
+        product_summary_list = []
+        for p_entry in product_summary_map.values():
+            p_entry["remaining_qty"] = p_entry["stock_in_qty"] - p_entry["total_out_qty"]
+            p_entry["other_destinations"] = sorted(list(p_entry["other_destinations"]))
+            product_summary_list.append(p_entry)
+        product_summary_list.sort(key=lambda x: x["stock_in_qty"], reverse=True)
 
         return {
             "project_id": project.id,
@@ -270,8 +363,12 @@ class ProjectRepository:
             "project_code": project.code,
             "total_items": len(items_list),
             "total_in_quantity": total_in_quantity,
+            "own_out_quantity": own_out_quantity,
+            "other_out_quantity": other_out_quantity,
+            "received_reallocated_quantity": received_reallocated_quantity,
             "total_out_quantity": total_out_quantity,
             "net_quantity": total_in_quantity - total_out_quantity,
+            "product_summary": product_summary_list,
             "items": items_list,
         }
 

@@ -1610,11 +1610,17 @@ class InventoryService:
 
             barcode_val = (si.barcode if si else None) or (v.barcode if v else None)
 
+            if not v and si and si.variant_id:
+                v = variants.get(si.variant_id) or self.db.query(ProductVariant).filter(ProductVariant.id == si.variant_id).first()
+
+            item_name = (v.name if v and v.name else None) or (v.sku if v and v.sku else None) or (p.name if p else None)
+
             tx_items.append({
                 "id": s.id,
                 "product_id": s.product_id,
                 "product_name": p.name if p else None,
                 "product_code": p.product_code if p else None,
+                "item_name": item_name,
                 "variant_id": s.variant_id,
                 "variant_name": v.name if v else None,
                 "variant_sku": v.sku if v else None,

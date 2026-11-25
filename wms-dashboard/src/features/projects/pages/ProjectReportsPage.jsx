@@ -13,7 +13,6 @@ import {
   Building,
   Layers,
   Layers3,
-  Calculator,
   Info,
 } from "lucide-react";
 import {
@@ -152,95 +151,6 @@ export function ProjectReportsPage() {
           icon={Boxes}
           tint="purple"
         />
-      </div>
-
-      {/* Visual Stock Balance Formula Bar */}
-      <div className="bg-gradient-to-r from-slate-50 via-white to-slate-50 dark:from-slate-900 dark:via-slate-800/80 dark:to-slate-900 p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs">
-        <div className="flex items-center justify-between flex-wrap gap-2 mb-2.5 pb-2 border-b border-slate-200/80 dark:border-slate-800 text-xs">
-          <div className="flex items-center gap-2">
-            <div className="w-5 h-5 rounded-md bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold text-xs">
-              <Calculator size={13} />
-            </div>
-            <span className="font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider text-[11px]">
-              Stock Balance Equation
-            </span>
-            <span className="text-slate-400 dark:text-slate-500 font-medium hidden sm:inline">
-              — Easy Step-by-Step Calculation Formula
-            </span>
-          </div>
-          <div className="text-[11px] font-mono text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700">
-            Formula: <span className="font-bold text-indigo-700 dark:text-indigo-300">Opening</span>{" "}
-            <span className="text-emerald-600 font-bold">+</span>{" "}
-            <span className="font-bold text-emerald-700 dark:text-emerald-300">Stock In</span>{" "}
-            <span className="text-amber-600 font-bold">−</span>{" "}
-            <span className="font-bold text-amber-700 dark:text-amber-300">Stock Out</span>{" "}
-            <span className="text-purple-600 font-bold">=</span>{" "}
-            <span className="font-bold text-purple-700 dark:text-purple-300">Remaining</span>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5 items-stretch text-center">
-          {/* Step 1: Opening Stock */}
-          <div className="flex sm:flex-col items-center justify-between sm:justify-center p-2.5 rounded-lg bg-indigo-50/70 dark:bg-indigo-950/30 border border-indigo-200/80 dark:border-indigo-800">
-            <span className="text-[10px] uppercase font-bold text-indigo-700 dark:text-indigo-300">
-              1. Opening Stock
-            </span>
-            <span className="text-lg font-bold font-mono text-indigo-950 dark:text-indigo-100 my-0.5">
-              {isLoading ? "..." : summaryStats.total_opening_stock ?? 0}
-            </span>
-            <span className="text-[10px] text-indigo-600/80 dark:text-indigo-400/80">
-              Initial / Carried Forward
-            </span>
-          </div>
-
-          {/* Step 2: Stock In */}
-          <div className="relative flex sm:flex-col items-center justify-between sm:justify-center p-2.5 rounded-lg bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200/80 dark:border-emerald-800">
-            <span className="hidden sm:flex absolute -left-3.5 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-white dark:bg-slate-800 border-2 border-emerald-300 dark:border-emerald-700 items-center justify-center text-xs font-extrabold text-emerald-600 shadow-xs z-10">
-              +
-            </span>
-            <span className="text-[10px] uppercase font-bold text-emerald-700 dark:text-emerald-300">
-              2. Stock In (+)
-            </span>
-            <span className="text-lg font-bold font-mono text-emerald-950 dark:text-emerald-100 my-0.5">
-              {isLoading ? "..." : `+${summaryStats.total_stock_in ?? 0}`}
-            </span>
-            <span className="text-[10px] text-emerald-600/80 dark:text-emerald-400/80">
-              Received into Projects
-            </span>
-          </div>
-
-          {/* Step 3: Stock Out */}
-          <div className="relative flex sm:flex-col items-center justify-between sm:justify-center p-2.5 rounded-lg bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-800">
-            <span className="hidden sm:flex absolute -left-3.5 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-white dark:bg-slate-800 border-2 border-amber-300 dark:border-amber-700 items-center justify-center text-xs font-extrabold text-amber-600 shadow-xs z-10">
-              −
-            </span>
-            <span className="text-[10px] uppercase font-bold text-amber-700 dark:text-amber-300">
-              3. Stock Out (−)
-            </span>
-            <span className="text-lg font-bold font-mono text-amber-950 dark:text-amber-100 my-0.5">
-              {isLoading ? "..." : `−${summaryStats.total_stock_out ?? 0}`}
-            </span>
-            <span className="text-[10px] text-amber-600/80 dark:text-amber-400/80">
-              Used / Dispatched from Sites
-            </span>
-          </div>
-
-          {/* Step 4: Remaining Balance */}
-          <div className="relative flex sm:flex-col items-center justify-between sm:justify-center p-2.5 rounded-lg bg-purple-50/90 dark:bg-purple-950/40 border-2 border-purple-300 dark:border-purple-700 shadow-xs">
-            <span className="hidden sm:flex absolute -left-3.5 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-white dark:bg-slate-800 border-2 border-purple-300 dark:border-purple-700 items-center justify-center text-xs font-extrabold text-purple-700 shadow-xs z-10">
-              =
-            </span>
-            <span className="text-[10px] uppercase font-bold text-purple-800 dark:text-purple-300">
-              4. Remaining Balance
-            </span>
-            <span className="text-lg font-bold font-mono text-purple-950 dark:text-purple-100 my-0.5">
-              {isLoading ? "..." : summaryStats.total_remaining_stock ?? 0}
-            </span>
-            <span className="text-[10px] text-purple-700/80 dark:text-purple-300/80 font-medium">
-              Current Available on Sites
-            </span>
-          </div>
-        </div>
       </div>
 
       {/* Active Periodic Cumulative Filter Banner */}
