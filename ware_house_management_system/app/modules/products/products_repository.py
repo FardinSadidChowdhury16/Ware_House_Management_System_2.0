@@ -461,17 +461,52 @@ class ProductsRepository:
             enrich_variants_with_warehouses([v], self.db)
         return v
 
+    def generate_next_product_code(self) -> str:
+        """Generate the next sequential 6-digit product code (000001 to 999999)."""
+        rows = self.db.query(Product.product_code).filter(Product.product_code.isnot(None)).all()
+        max_num = 0
+        for (code,) in rows:
+            if code and re.fullmatch(r"\d{6}", str(code).strip()):
+                val = int(str(code).strip())
+                if val > max_num:
+                    max_num = val
+        next_num = max_num + 1
+        while next_num <= 999999:
+            candidate = f"{next_num:06d}"
+            if not self.get_product_by_code(candidate):
+                return candidate
+            next_num += 1
+        raise ValueError("Maximum 6-digit product code limit (999999) reached.")
+
     def create_product_with_variants(self, product_in: ProductCreate) -> Product:
-        product = Product(
-            name=product_in.name,
-            product_code=product_in.product_code,
-            category_id=product_in.category_id,
-            tracking_type=product_in.tracking_type,
-            min_stock_level=product_in.min_stock_level,
-            status=product_in.status,
-        )
-        self.db.add(product)
-        self.db.flush()
+        from sqlalchemy.exc import IntegrityError
+
+        is_auto_code = not (product_in.product_code and product_in.product_code.strip())
+        max_attempts = 5 if is_auto_code else 1
+
+        product = None
+        for attempt in range(max_attempts):
+            code = (
+                product_in.product_code.strip()
+                if not is_auto_code
+                else self.generate_next_product_code()
+            )
+            product = Product(
+                name=product_in.name,
+                product_code=code,
+                category_id=product_in.category_id,
+                tracking_type=product_in.tracking_type,
+                min_stock_level=product_in.min_stock_level,
+                status=product_in.status,
+            )
+            self.db.add(product)
+            try:
+                self.db.flush()
+                break
+            except IntegrityError:
+                self.db.rollback()
+                if attempt >= max_attempts - 1:
+                    raise
 
         if product_in.variants:
             for v_in in product_in.variants:

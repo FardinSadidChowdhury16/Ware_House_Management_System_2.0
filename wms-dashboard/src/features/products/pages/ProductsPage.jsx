@@ -2146,6 +2146,7 @@ export function ProductsPage() {
               filename="products"
               columns={[
                 { label: "ID", key: "id" },
+                { label: "Product Code", key: "product_code" },
                 { label: "Product Name", key: "name" },
                 { label: "Category", key: "category" },
                 { label: "Tracking Type", key: "tracking" },
@@ -2208,7 +2209,7 @@ export function ProductsPage() {
           <table className="w-full">
             <thead>
               <tr>
-                <Th>Product Name</Th>
+                <Th>Product Code &amp; Name</Th>
                 <Th>Category</Th>
                 <Th>Tracking</Th>
                 <Th>Items</Th>
@@ -2220,9 +2221,19 @@ export function ProductsPage() {
               {filtered.map((p) => (
                 <tr key={p.id} className="hover:bg-slate-50/50">
                   <Td>
-                    <span className="font-medium text-slate-900 text-sm">
-                      {p.name}
-                    </span>
+                    <div className="flex items-center gap-2.5">
+                      {p.product_code && (
+                        <span
+                          className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200 tracking-wider shrink-0"
+                          title="Product Code"
+                        >
+                          {p.product_code}
+                        </span>
+                      )}
+                      <span className="font-medium text-slate-900 text-sm">
+                        {p.name}
+                      </span>
+                    </div>
                   </Td>
                   <Td>
                     <Badge color="slate">{p.category}</Badge>
