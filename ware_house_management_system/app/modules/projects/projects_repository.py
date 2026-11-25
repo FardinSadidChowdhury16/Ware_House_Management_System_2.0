@@ -441,6 +441,8 @@ class ProjectRepository:
                     "active_projects": 0,
                     "total_opening_stock": 0,
                     "total_stock_in": 0,
+                    "total_own_out": 0,
+                    "total_other_out": 0,
                     "total_stock_out": 0,
                     "total_remaining_stock": 0,
                     "has_date_filter": has_date_filter,
@@ -453,19 +455,28 @@ class ProjectRepository:
         proj_map = {p.id: p for p in projects}
         project_ids = list(proj_map.keys())
 
-        # All projects for dropdown selection
+        # All projects for dropdown selection & destination lookup
         all_projs_query = self.db.query(Project).order_by(Project.name.asc()).all()
+        all_proj_map = {p.id: p for p in all_projs_query}
         projects_list = [
             {"id": p.id, "name": p.name, "code": p.code, "status": p.status}
             for p in all_projs_query
         ]
 
-        # 3. Query all Products
+        # 3. Query all Products & Customers for destination names
+        from app.models.party import Customer
         all_products = self.db.query(Product).all()
         prod_map = {pr.id: pr for pr in all_products}
+        all_customers = self.db.query(Customer).all()
+        cust_map = {c.id: c for c in all_customers}
 
-        # 4. Query movements associated with these projects
-        sm_query = self.db.query(StockMovement).filter(StockMovement.project_id.in_(project_ids))
+        # 4. Query movements associated with these projects (either directly or via allocated_project_id)
+        sm_query = self.db.query(StockMovement).filter(
+            or_(
+                StockMovement.project_id.in_(project_ids),
+                StockMovement.allocated_project_id.in_(project_ids),
+            )
+        )
         if warehouse_id:
             sm_query = sm_query.filter(
                 or_(
@@ -475,7 +486,12 @@ class ProjectRepository:
             )
         movements = sm_query.order_by(StockMovement.created_at.asc()).all()
 
-        si_query = self.db.query(SerializedItem).filter(SerializedItem.project_id.in_(project_ids))
+        si_query = self.db.query(SerializedItem).filter(
+            or_(
+                SerializedItem.project_id.in_(project_ids),
+                SerializedItem.allocated_project_id.in_(project_ids),
+            )
+        )
         if warehouse_id:
             si_query = si_query.filter(SerializedItem.warehouse_id == warehouse_id)
         direct_serials = si_query.all()
@@ -490,8 +506,11 @@ class ProjectRepository:
                 "status": proj_map[pid].status,
                 "opening_stock": 0,
                 "stock_in_qty": 0,
+                "own_out_qty": 0,
+                "other_out_qty": 0,
                 "stock_out_qty": 0,
                 "remaining_stock": 0,
+                "other_destinations": set(),
                 "distinct_products": set(),
             }
             for pid in project_ids
@@ -506,28 +525,27 @@ class ProjectRepository:
                     "opening_in": 0,
                     "opening_out": 0,
                     "period_in": 0,
+                    "period_own_out": 0,
+                    "period_other_out": 0,
                     "period_out": 0,
                     "all_time_in": 0,
                     "all_time_out": 0,
+                    "other_destinations": set(),
                     "last_movement_at": None,
                 }
             return pair_data[key]
 
         movement_serial_ids = set()
         for m in movements:
-            if not m.product_id or m.project_id not in proj_map:
+            if not m.product_id:
                 continue
 
             if m.product_item_id:
                 movement_serial_ids.add(m.product_item_id)
 
-            rec = get_pair(m.project_id, m.product_id)
             qty = m.quantity or 1
             m_dt = m.created_at
-
-            if m_dt:
-                if rec["last_movement_at"] is None or m_dt > rec["last_movement_at"]:
-                    rec["last_movement_at"] = m_dt
+            m_alloc_pid = getattr(m, "allocated_project_id", None)
 
             mov_type_str = (
                 m.movement_type.value
@@ -542,6 +560,12 @@ class ProjectRepository:
             ) and not (m.from_warehouse_id is not None and "out" in mov_type_str)
 
             if is_inbound:
+                owner_pid = m.project_id if m.project_id in proj_map else (m_alloc_pid if m_alloc_pid in proj_map else None)
+                if not owner_pid:
+                    continue
+                rec = get_pair(owner_pid, m.product_id)
+                if m_dt and (rec["last_movement_at"] is None or m_dt > rec["last_movement_at"]):
+                    rec["last_movement_at"] = m_dt
                 rec["all_time_in"] += qty
                 if has_date_filter:
                     if dt_from and m_dt and m_dt < dt_from:
@@ -551,19 +575,50 @@ class ProjectRepository:
                 else:
                     rec["period_in"] += qty
             else:
-                rec["all_time_out"] += qty
-                if has_date_filter:
-                    if dt_from and m_dt and m_dt < dt_from:
-                        rec["opening_out"] += qty
-                    elif (not dt_from or (m_dt and m_dt >= dt_from)) and (not dt_to or (m_dt and m_dt < dt_to)):
+                # Outbound movement: classify as Own Out vs Other Project Out
+                if m.project_id in proj_map and (m_alloc_pid is None or m_alloc_pid == m.project_id):
+                    rec = get_pair(m.project_id, m.product_id)
+                    if m_dt and (rec["last_movement_at"] is None or m_dt > rec["last_movement_at"]):
+                        rec["last_movement_at"] = m_dt
+                    rec["all_time_out"] += qty
+                    if has_date_filter:
+                        if dt_from and m_dt and m_dt < dt_from:
+                            rec["opening_out"] += qty
+                        elif (not dt_from or (m_dt and m_dt >= dt_from)) and (not dt_to or (m_dt and m_dt < dt_to)):
+                            rec["period_own_out"] += qty
+                            rec["period_out"] += qty
+                    else:
+                        rec["period_own_out"] += qty
                         rec["period_out"] += qty
-                else:
-                    rec["period_out"] += qty
+                elif m_alloc_pid in proj_map and m.project_id != m_alloc_pid:
+                    rec = get_pair(m_alloc_pid, m.product_id)
+                    if m_dt and (rec["last_movement_at"] is None or m_dt > rec["last_movement_at"]):
+                        rec["last_movement_at"] = m_dt
+                    rec["all_time_out"] += qty
+                    if has_date_filter:
+                        if dt_from and m_dt and m_dt < dt_from:
+                            rec["opening_out"] += qty
+                        elif (not dt_from or (m_dt and m_dt >= dt_from)) and (not dt_to or (m_dt and m_dt < dt_to)):
+                            rec["period_other_out"] += qty
+                            rec["period_out"] += qty
+                    else:
+                        rec["period_other_out"] += qty
+                        rec["period_out"] += qty
+
+                    # Record destination label
+                    if m.project_id and m.project_id in all_proj_map:
+                        dp = all_proj_map[m.project_id]
+                        rec["other_destinations"].add(f"{dp.name} ({dp.code})" if dp.code else dp.name)
+                    elif m.customer_id and m.customer_id in cust_map:
+                        rec["other_destinations"].add(f"Customer: {cust_map[m.customer_id].name}")
+                    else:
+                        rec["other_destinations"].add("Other Destination")
 
         for s in direct_serials:
-            if s.id in movement_serial_ids or not s.product_id or s.project_id not in proj_map:
+            s_pid = s.project_id if s.project_id in proj_map else (getattr(s, "allocated_project_id", None) if getattr(s, "allocated_project_id", None) in proj_map else None)
+            if s.id in movement_serial_ids or not s.product_id or not s_pid:
                 continue
-            rec = get_pair(s.project_id, s.product_id)
+            rec = get_pair(s_pid, s.product_id)
             s_dt = s.created_at
             if s_dt:
                 if rec["last_movement_at"] is None or s_dt > rec["last_movement_at"]:
@@ -582,6 +637,8 @@ class ProjectRepository:
         items_report = []
         tot_opening = 0
         tot_in = 0
+        tot_own_out = 0
+        tot_other_out = 0
         tot_out = 0
         tot_remaining = 0
         distinct_products_all = set()
@@ -622,11 +679,16 @@ class ProjectRepository:
 
             opening_stock = rec["opening_in"] - rec["opening_out"]
             stock_in_qty = rec["period_in"]
+            own_out_qty = rec["period_own_out"]
+            other_out_qty = rec["period_other_out"]
             stock_out_qty = rec["period_out"]
             remaining_stock = opening_stock + stock_in_qty - stock_out_qty
+            other_dests = sorted(list(rec["other_destinations"]))
 
             tot_opening += opening_stock
             tot_in += stock_in_qty
+            tot_own_out += own_out_qty
+            tot_other_out += other_out_qty
             tot_out += stock_out_qty
             tot_remaining += remaining_stock
 
@@ -637,8 +699,12 @@ class ProjectRepository:
                 ps = project_stats[pid]
                 ps["opening_stock"] += opening_stock
                 ps["stock_in_qty"] += stock_in_qty
+                ps["own_out_qty"] += own_out_qty
+                ps["other_out_qty"] += other_out_qty
                 ps["stock_out_qty"] += stock_out_qty
                 ps["remaining_stock"] += remaining_stock
+                for od in other_dests:
+                    ps["other_destinations"].add(od)
                 ps["distinct_products"].add(prid)
 
             items_report.append({
@@ -655,7 +721,10 @@ class ProjectRepository:
                 "tracking_type": prod_tracking,
                 "opening_stock": opening_stock,
                 "stock_in_qty": stock_in_qty,
+                "own_out_qty": own_out_qty,
+                "other_out_qty": other_out_qty,
                 "stock_out_qty": stock_out_qty,
+                "other_destinations": other_dests,
                 "closing_stock": remaining_stock,
                 "remaining_stock": remaining_stock,
                 "all_time_in": rec["all_time_in"],
@@ -678,7 +747,10 @@ class ProjectRepository:
                 "distinct_products_count": len(ps["distinct_products"]),
                 "opening_stock": ps["opening_stock"],
                 "stock_in_qty": ps["stock_in_qty"],
+                "own_out_qty": ps["own_out_qty"],
+                "other_out_qty": ps["other_out_qty"],
                 "stock_out_qty": ps["stock_out_qty"],
+                "other_destinations": sorted(list(ps["other_destinations"])),
                 "remaining_stock": ps["remaining_stock"],
             })
 
@@ -691,6 +763,8 @@ class ProjectRepository:
                 "active_projects": active_projects_count,
                 "total_opening_stock": tot_opening,
                 "total_stock_in": tot_in,
+                "total_own_out": tot_own_out,
+                "total_other_out": tot_other_out,
                 "total_stock_out": tot_out,
                 "total_remaining_stock": tot_remaining,
                 "has_date_filter": has_date_filter,

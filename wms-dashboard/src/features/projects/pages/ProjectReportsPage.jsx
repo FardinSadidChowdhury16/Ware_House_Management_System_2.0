@@ -14,6 +14,8 @@ import {
   Layers,
   Layers3,
   Info,
+  Calculator,
+  AlertTriangle,
 } from "lucide-react";
 import {
   Badge,
@@ -117,12 +119,21 @@ export function ProjectReportsPage() {
     return currentList.slice(start, start + PAGE_SIZE);
   }, [currentList, page]);
 
+  const totPool = (summaryStats.total_opening_stock ?? 0) + (summaryStats.total_stock_in ?? 0);
+  const totOwnOut = summaryStats.total_own_out ?? 0;
+  const totOtherOut = summaryStats.total_other_out ?? 0;
+  const totRem = summaryStats.total_remaining_stock ?? 0;
+  const poolDenom = totPool > 0 ? totPool : 1;
+  const ownPct = Math.min(100, Math.round((totOwnOut / poolDenom) * 100));
+  const otherPct = Math.min(100 - ownPct, Math.round((totOtherOut / poolDenom) * 100));
+  const remPct = Math.max(0, 100 - ownPct - otherPct);
+
   return (
     <div className="space-y-4">
       {/* Summary StatCards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         <StatCard
-          label="Total Products in Projects"
+          label="Products in Projects"
           value={isLoading ? "..." : summaryStats.total_products ?? 0}
           icon={Package}
           tint="blue"
@@ -134,23 +145,195 @@ export function ProjectReportsPage() {
           tint="indigo"
         />
         <StatCard
-          label="Period Stock In (+)"
-          value={isLoading ? "..." : summaryStats.total_stock_in ?? 0}
+          label="Stock In (+)"
+          value={isLoading ? "..." : `+${summaryStats.total_stock_in ?? 0}`}
           icon={ArrowDownLeft}
           tint="emerald"
         />
         <StatCard
-          label="Period Stock Out (-)"
-          value={isLoading ? "..." : summaryStats.total_stock_out ?? 0}
+          label="Own Project Out"
+          value={isLoading ? "..." : `-${totOwnOut}`}
           icon={ArrowUpRight}
-          tint="amber"
+          tint="blue"
         />
         <StatCard
-          label={dateTo ? "Remaining (Cumulative)" : "Remaining In Stock"}
-          value={isLoading ? "..." : summaryStats.total_remaining_stock ?? 0}
+          label="Other Project Out"
+          value={isLoading ? "..." : `-${totOtherOut}`}
+          icon={AlertTriangle}
+          tint="rose"
+        />
+        <StatCard
+          label={dateTo ? "Remaining (Cum.)" : "Remaining"}
+          value={isLoading ? "..." : totRem}
           icon={Boxes}
           tint="purple"
         />
+      </div>
+
+      {/* Visual Stock Balance Equation & Stacked Distribution Bar */}
+      <div className="bg-gradient-to-r from-slate-50 via-white to-slate-50 dark:from-slate-900 dark:via-slate-800/80 dark:to-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-3">
+        <div className="flex items-center justify-between flex-wrap gap-2 pb-2 border-b border-slate-200/80 dark:border-slate-800 text-xs">
+          <div className="flex items-center gap-2">
+            <div className="w-5 h-5 rounded-md bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold text-xs">
+              <Calculator size={13} />
+            </div>
+            <span className="font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider text-[11px]">
+              Project Allocation &amp; Stock Out Equation
+            </span>
+            <span className="text-slate-400 dark:text-slate-500 font-medium hidden md:inline">
+              — Opening + Stock In − Own Project Out − Other Project Out = Remaining
+            </span>
+          </div>
+          <div className="text-[11px] font-mono text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700">
+            <span className="font-bold text-indigo-700 dark:text-indigo-300">Opening</span>{" "}
+            <span className="text-emerald-600 font-bold">+</span>{" "}
+            <span className="font-bold text-emerald-700 dark:text-emerald-300">In</span>{" "}
+            <span className="text-blue-600 font-bold">−</span>{" "}
+            <span className="font-bold text-blue-700 dark:text-blue-300">Own Out</span>{" "}
+            <span className="text-rose-600 font-bold">−</span>{" "}
+            <span className="font-bold text-rose-700 dark:text-rose-300">Other Out</span>{" "}
+            <span className="text-purple-600 font-bold">=</span>{" "}
+            <span className="font-bold text-purple-700 dark:text-purple-300">Remaining</span>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-5 gap-2.5 items-stretch text-center">
+          {/* 1. Opening */}
+          <div className="flex sm:flex-col items-center justify-between sm:justify-center p-2.5 rounded-lg bg-indigo-50/70 dark:bg-indigo-950/30 border border-indigo-200/80 dark:border-indigo-800">
+            <span className="text-[10px] uppercase font-bold text-indigo-700 dark:text-indigo-300">
+              1. Opening
+            </span>
+            <span className="text-lg font-bold font-mono text-indigo-950 dark:text-indigo-100 my-0.5">
+              {isLoading ? "..." : summaryStats.total_opening_stock ?? 0}
+            </span>
+            <span className="text-[10px] text-indigo-600/80 dark:text-indigo-400/80">
+              Prior Balance
+            </span>
+          </div>
+
+          {/* 2. Stock In */}
+          <div className="relative flex sm:flex-col items-center justify-between sm:justify-center p-2.5 rounded-lg bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200/80 dark:border-emerald-800">
+            <span className="hidden sm:flex absolute -left-3.5 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-white dark:bg-slate-800 border-2 border-emerald-300 dark:border-emerald-700 items-center justify-center text-xs font-extrabold text-emerald-600 shadow-xs z-10">
+              +
+            </span>
+            <span className="text-[10px] uppercase font-bold text-emerald-700 dark:text-emerald-300">
+              2. Stock In (+)
+            </span>
+            <span className="text-lg font-bold font-mono text-emerald-950 dark:text-emerald-100 my-0.5">
+              {isLoading ? "..." : `+${summaryStats.total_stock_in ?? 0}`}
+            </span>
+            <span className="text-[10px] text-emerald-600/80 dark:text-emerald-400/80">
+              Allocated to Projects
+            </span>
+          </div>
+
+          {/* 3. Own Out */}
+          <div className="relative flex sm:flex-col items-center justify-between sm:justify-center p-2.5 rounded-lg bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200/80 dark:border-blue-800">
+            <span className="hidden sm:flex absolute -left-3.5 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-white dark:bg-slate-800 border-2 border-blue-300 dark:border-blue-700 items-center justify-center text-xs font-extrabold text-blue-600 shadow-xs z-10">
+              −
+            </span>
+            <span className="text-[10px] uppercase font-bold text-blue-700 dark:text-blue-300">
+              3. Own Out (−)
+            </span>
+            <span className="text-lg font-bold font-mono text-blue-950 dark:text-blue-100 my-0.5">
+              {isLoading ? "..." : `−${totOwnOut}`}
+            </span>
+            <span className="text-[10px] text-blue-600/80 dark:text-blue-400/80">
+              Used in Own Project
+            </span>
+          </div>
+
+          {/* 4. Other Project Out */}
+          <div className={`relative flex sm:flex-col items-center justify-between sm:justify-center p-2.5 rounded-lg border ${
+            totOtherOut > 0
+              ? "bg-rose-50/80 dark:bg-rose-950/40 border-rose-300 dark:border-rose-700"
+              : "bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700"
+          }`}>
+            <span className="hidden sm:flex absolute -left-3.5 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-white dark:bg-slate-800 border-2 border-rose-300 dark:border-rose-700 items-center justify-center text-xs font-extrabold text-rose-600 shadow-xs z-10">
+              −
+            </span>
+            <span className={`text-[10px] uppercase font-bold flex items-center gap-1 ${
+              totOtherOut > 0 ? "text-rose-700 dark:text-rose-300" : "text-slate-500"
+            }`}>
+              {totOtherOut > 0 && <AlertTriangle size={11} className="text-rose-600" />}
+              4. Other Out (−)
+            </span>
+            <span className={`text-lg font-bold font-mono my-0.5 ${
+              totOtherOut > 0 ? "text-rose-800 dark:text-rose-200" : "text-slate-600 dark:text-slate-300"
+            }`}>
+              {isLoading ? "..." : `−${totOtherOut}`}
+            </span>
+            <span className={`text-[10px] ${
+              totOtherOut > 0 ? "text-rose-600 dark:text-rose-400 font-medium" : "text-slate-400"
+            }`}>
+              Diverted to Other
+            </span>
+          </div>
+
+          {/* 5. Remaining Balance */}
+          <div className="relative flex sm:flex-col items-center justify-between sm:justify-center p-2.5 rounded-lg bg-purple-50/90 dark:bg-purple-950/40 border-2 border-purple-300 dark:border-purple-700 shadow-xs">
+            <span className="hidden sm:flex absolute -left-3.5 top-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-white dark:bg-slate-800 border-2 border-purple-300 dark:border-purple-700 items-center justify-center text-xs font-extrabold text-purple-700 shadow-xs z-10">
+              =
+            </span>
+            <span className="text-[10px] uppercase font-bold text-purple-800 dark:text-purple-300">
+              5. Remaining
+            </span>
+            <span className="text-lg font-bold font-mono text-purple-950 dark:text-purple-100 my-0.5">
+              {isLoading ? "..." : totRem}
+            </span>
+            <span className="text-[10px] text-purple-700/80 dark:text-purple-300/80 font-medium">
+              Available Balance
+            </span>
+          </div>
+        </div>
+
+        {/* Visual Stacked Allocation Distribution Bar */}
+        {totPool > 0 && (
+          <div className="pt-1 space-y-1.5">
+            <div className="w-full h-3 rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden flex shadow-inner">
+              {ownPct > 0 && (
+                <div
+                  className="bg-blue-600 h-full transition-all"
+                  style={{ width: `${ownPct}%` }}
+                  title={`Own Project Out: ${totOwnOut} units (${ownPct}%)`}
+                />
+              )}
+              {otherPct > 0 && (
+                <div
+                  className="bg-rose-500 h-full transition-all"
+                  style={{ width: `${otherPct}%` }}
+                  title={`Other Project Out: ${totOtherOut} units (${otherPct}%)`}
+                />
+              )}
+              {remPct > 0 && (
+                <div
+                  className="bg-purple-500 h-full transition-all"
+                  style={{ width: `${remPct}%` }}
+                  title={`Remaining Balance: ${totRem} units (${remPct}%)`}
+                />
+              )}
+            </div>
+            <div className="flex items-center justify-between flex-wrap gap-2 text-[11px] font-medium text-slate-600 dark:text-slate-400">
+              <div className="flex items-center gap-4 flex-wrap">
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-blue-600 inline-block" />
+                  Own Project Out: <strong className="text-slate-800 dark:text-slate-200">{totOwnOut} ({ownPct}%)</strong>
+                </span>
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-rose-500 inline-block" />
+                  Other Project Out: <strong className={totOtherOut > 0 ? "text-rose-600 font-bold" : "text-slate-800 dark:text-slate-200"}>{totOtherOut} ({otherPct}%)</strong>
+                </span>
+                <span className="inline-flex items-center gap-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-purple-500 inline-block" />
+                  Remaining: <strong className="text-purple-700 dark:text-purple-300">{totRem} ({remPct}%)</strong>
+                </span>
+              </div>
+              <span className="text-[10px] text-slate-400 font-mono">
+                Total Available Pool (Opening + In): {totPool} units (100%)
+              </span>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Active Periodic Cumulative Filter Banner */}
@@ -248,8 +431,11 @@ export function ProjectReportsPage() {
                     { label: "Site Location", key: "site_location" },
                     { label: "Opening Stock", key: "opening_stock" },
                     { label: "Stock In (+)", key: "stock_in_qty" },
-                    { label: "Stock Out (-)", key: "stock_out_qty" },
+                    { label: "Own Stock Out (-)", key: "own_out_qty" },
+                    { label: "Other Project Out (-)", key: "other_out_qty" },
+                    { label: "Total Stock Out (-)", key: "stock_out_qty" },
                     { label: "Remaining", key: "remaining_stock" },
+                    { label: "Other Destinations", value: (p) => (p.other_destinations || []).join("; ") || "—" },
                     {
                       label: "Last Movement",
                       value: (p) => (p.last_movement_at ? formatBDDateTime(p.last_movement_at) : "Never"),
@@ -262,7 +448,9 @@ export function ProjectReportsPage() {
                     { label: "Distinct Products", key: "distinct_products_count" },
                     { label: "Opening Stock", key: "opening_stock" },
                     { label: "Stock In (+)", key: "stock_in_qty" },
-                    { label: "Stock Out (-)", key: "stock_out_qty" },
+                    { label: "Own Stock Out (-)", key: "own_out_qty" },
+                    { label: "Other Project Out (-)", key: "other_out_qty" },
+                    { label: "Total Stock Out (-)", key: "stock_out_qty" },
                     { label: "Remaining", key: "remaining_stock" },
                   ]
             }
@@ -365,24 +553,31 @@ export function ProjectReportsPage() {
                     </span>
                   </Th>
                   <Th className="text-right">
-                    <span className="inline-flex items-center gap-1 text-amber-700 dark:text-amber-300 font-bold" title="Total dispatched / used (−) from project">
-                      <span className="w-3.5 h-3.5 rounded-full bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 text-[10px] inline-flex items-center justify-center font-extrabold">−</span>
-                      Stock Out
+                    <span className="inline-flex items-center gap-1 text-blue-700 dark:text-blue-300 font-bold" title="Stocked out to this exact project (Own)">
+                      <span className="w-3.5 h-3.5 rounded-full bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 text-[10px] inline-flex items-center justify-center font-extrabold">−</span>
+                      Own Out
+                    </span>
+                  </Th>
+                  <Th className="text-right">
+                    <span className="inline-flex items-center gap-1 text-rose-700 dark:text-rose-300 font-bold" title="Diverted / stocked out to another project or customer">
+                      <span className="w-3.5 h-3.5 rounded-full bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300 text-[10px] inline-flex items-center justify-center font-extrabold">−</span>
+                      Other Out
                     </span>
                   </Th>
                   <Th className="text-right bg-purple-50/50 dark:bg-purple-950/20">
-                    <span className="inline-flex items-center gap-1 text-purple-800 dark:text-purple-300 font-bold" title="Remaining stock available on site (= Opening + In - Out)">
+                    <span className="inline-flex items-center gap-1 text-purple-800 dark:text-purple-300 font-bold" title="Remaining stock available on site (= Opening + In - Own Out - Other Out)">
                       <span className="w-3.5 h-3.5 rounded-full bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 text-[10px] inline-flex items-center justify-center font-extrabold">=</span>
                       Remaining
                     </span>
                   </Th>
+                  <Th className="w-36">Visual Breakdown</Th>
                   <Th className="text-right">Action</Th>
                 </tr>
               </thead>
               <tbody>
                 {isLoading ? (
                   <tr>
-                    <td colSpan={10} className="text-center py-10 text-sm text-slate-400">
+                    <td colSpan={12} className="text-center py-10 text-sm text-slate-400">
                       <div className="inline-flex items-center gap-2">
                         <Clock className="animate-spin text-blue-500" size={16} />
                         <span>Loading product project stock report...</span>
@@ -390,7 +585,7 @@ export function ProjectReportsPage() {
                     </td>
                   </tr>
                 ) : pagedItems.length === 0 ? (
-                  <EmptyTable cols={10} message="No product records found for the selected project and filters." />
+                  <EmptyTable cols={12} message="No product records found for the selected project and filters." />
                 ) : (
                   pagedItems.map((item, idx) => {
                     const rowNumber = (page - 1) * PAGE_SIZE + idx + 1;
@@ -464,13 +659,35 @@ export function ProjectReportsPage() {
                         <Td className="text-right">
                           <span
                             className={`font-mono text-xs font-bold px-2 py-0.5 rounded-full ${
-                              (item.stock_out_qty ?? 0) > 0
-                                ? "bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/40 dark:text-amber-300"
+                              (item.own_out_qty ?? 0) > 0
+                                ? "bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-950/40 dark:text-blue-300"
                                 : "text-slate-400"
                             }`}
                           >
-                            {(item.stock_out_qty ?? 0) > 0 ? `-${item.stock_out_qty}` : "0"}
+                            {(item.own_out_qty ?? 0) > 0 ? `-${item.own_out_qty}` : "0"}
                           </span>
+                        </Td>
+                        <Td className="text-right">
+                          <div className="flex flex-col items-end gap-0.5">
+                            <span
+                              className={`font-mono text-xs font-bold px-2 py-0.5 rounded-full ${
+                                (item.other_out_qty ?? 0) > 0
+                                  ? "bg-rose-50 text-rose-700 border border-rose-300 dark:bg-rose-950/50 dark:text-rose-300"
+                                  : "text-slate-400"
+                              }`}
+                            >
+                              {(item.other_out_qty ?? 0) > 0 ? `-${item.other_out_qty}` : "0"}
+                            </span>
+                            {item.other_destinations && item.other_destinations.length > 0 && (
+                              <div className="flex flex-wrap justify-end gap-0.5 mt-0.5">
+                                {item.other_destinations.slice(0, 2).map((dest) => (
+                                  <span key={dest} className="text-[9px] font-semibold bg-rose-50 text-rose-700 border border-rose-200 px-1 py-0.2 rounded truncate max-w-[110px]" title={dest}>
+                                    → {dest}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
                         </Td>
                         <Td className="text-right bg-purple-50/30 dark:bg-purple-950/10">
                           <div className="flex flex-col items-end">
@@ -487,11 +704,34 @@ export function ProjectReportsPage() {
                             </span>
                             <span
                               className="text-[10px] text-slate-400 font-mono mt-0.5 whitespace-nowrap"
-                              title="Formula: Opening + Stock In − Stock Out = Remaining"
+                              title="Formula: Opening + Stock In − Own Out − Other Out = Remaining"
                             >
-                              {item.opening_stock ?? 0} + {item.stock_in_qty ?? 0} − {item.stock_out_qty ?? 0}
+                              {item.opening_stock ?? 0} + {item.stock_in_qty ?? 0} − {item.own_out_qty ?? 0} − {item.other_out_qty ?? 0}
                             </span>
                           </div>
+                        </Td>
+                        <Td>
+                          {(() => {
+                            const rPool = (item.opening_stock ?? 0) + (item.stock_in_qty ?? 0);
+                            const rDenom = rPool > 0 ? rPool : 1;
+                            const rOwn = Math.min(100, Math.round(((item.own_out_qty ?? 0) / rDenom) * 100));
+                            const rOther = Math.min(100 - rOwn, Math.round(((item.other_out_qty ?? 0) / rDenom) * 100));
+                            const rRem = Math.max(0, 100 - rOwn - rOther);
+                            return (
+                              <div className="w-full min-w-[110px]">
+                                <div className="w-full h-2 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden flex">
+                                  {rOwn > 0 && <div className="bg-blue-600 h-full" style={{ width: `${rOwn}%` }} title={`Own Out: ${item.own_out_qty ?? 0}`} />}
+                                  {rOther > 0 && <div className="bg-rose-500 h-full" style={{ width: `${rOther}%` }} title={`Other Out: ${item.other_out_qty ?? 0}`} />}
+                                  {rRem > 0 && <div className="bg-purple-500 h-full" style={{ width: `${rRem}%` }} title={`Remaining: ${item.remaining_stock ?? 0}`} />}
+                                </div>
+                                <div className="flex justify-between text-[9px] text-slate-400 font-mono mt-0.5">
+                                  <span>Own {rOwn}%</span>
+                                  {(item.other_out_qty ?? 0) > 0 && <span className="text-rose-600 font-semibold">Oth {rOther}%</span>}
+                                  <span>Rem {rRem}%</span>
+                                </div>
+                              </div>
+                            );
+                          })()}
                         </Td>
                         <Td className="text-right">
                           <button
@@ -539,24 +779,31 @@ export function ProjectReportsPage() {
                     </span>
                   </Th>
                   <Th className="text-right">
-                    <span className="inline-flex items-center gap-1 text-amber-700 dark:text-amber-300 font-bold" title="Total dispatched / used (−) from project">
-                      <span className="w-3.5 h-3.5 rounded-full bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 text-[10px] inline-flex items-center justify-center font-extrabold">−</span>
-                      Stock Out
+                    <span className="inline-flex items-center gap-1 text-blue-700 dark:text-blue-300 font-bold" title="Stocked out to this exact project (Own)">
+                      <span className="w-3.5 h-3.5 rounded-full bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 text-[10px] inline-flex items-center justify-center font-extrabold">−</span>
+                      Own Out
+                    </span>
+                  </Th>
+                  <Th className="text-right">
+                    <span className="inline-flex items-center gap-1 text-rose-700 dark:text-rose-300 font-bold" title="Diverted / stocked out to another project or customer">
+                      <span className="w-3.5 h-3.5 rounded-full bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-300 text-[10px] inline-flex items-center justify-center font-extrabold">−</span>
+                      Other Out
                     </span>
                   </Th>
                   <Th className="text-right bg-purple-50/50 dark:bg-purple-950/20">
-                    <span className="inline-flex items-center gap-1 text-purple-800 dark:text-purple-300 font-bold" title="Remaining stock available on site (= Opening + In - Out)">
+                    <span className="inline-flex items-center gap-1 text-purple-800 dark:text-purple-300 font-bold" title="Remaining stock available on site (= Opening + In - Own Out - Other Out)">
                       <span className="w-3.5 h-3.5 rounded-full bg-purple-100 dark:bg-purple-950 text-purple-700 dark:text-purple-300 text-[10px] inline-flex items-center justify-center font-extrabold">=</span>
                       Remaining
                     </span>
                   </Th>
+                  <Th className="w-36">Visual Breakdown</Th>
                   <Th className="text-right">Action</Th>
                 </tr>
               </thead>
               <tbody>
                 {isLoading ? (
                   <tr>
-                    <td colSpan={9} className="text-center py-10 text-sm text-slate-400">
+                    <td colSpan={11} className="text-center py-10 text-sm text-slate-400">
                       <div className="inline-flex items-center gap-2">
                         <Clock className="animate-spin text-blue-500" size={16} />
                         <span>Loading projects overview...</span>
@@ -564,7 +811,7 @@ export function ProjectReportsPage() {
                     </td>
                   </tr>
                 ) : pagedItems.length === 0 ? (
-                  <EmptyTable cols={9} message="No projects found." />
+                  <EmptyTable cols={11} message="No projects found." />
                 ) : (
                   pagedItems.map((item, idx) => {
                     const rowNumber = (page - 1) * PAGE_SIZE + idx + 1;
@@ -608,9 +855,37 @@ export function ProjectReportsPage() {
                           </span>
                         </Td>
                         <Td className="text-right">
-                          <span className="font-mono text-xs font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 border border-amber-200 dark:bg-amber-950/40 dark:text-amber-300">
-                            -{item.stock_out_qty ?? 0}
+                          <span
+                            className={`font-mono text-xs font-bold px-2 py-0.5 rounded-full ${
+                              (item.own_out_qty ?? 0) > 0
+                                ? "bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-950/40 dark:text-blue-300"
+                                : "text-slate-400"
+                            }`}
+                          >
+                            {(item.own_out_qty ?? 0) > 0 ? `-${item.own_out_qty}` : "0"}
                           </span>
+                        </Td>
+                        <Td className="text-right">
+                          <div className="flex flex-col items-end gap-0.5">
+                            <span
+                              className={`font-mono text-xs font-bold px-2 py-0.5 rounded-full ${
+                                (item.other_out_qty ?? 0) > 0
+                                  ? "bg-rose-50 text-rose-700 border border-rose-300 dark:bg-rose-950/50 dark:text-rose-300"
+                                  : "text-slate-400"
+                              }`}
+                            >
+                              {(item.other_out_qty ?? 0) > 0 ? `-${item.other_out_qty}` : "0"}
+                            </span>
+                            {item.other_destinations && item.other_destinations.length > 0 && (
+                              <div className="flex flex-wrap justify-end gap-0.5 mt-0.5">
+                                {item.other_destinations.slice(0, 2).map((dest) => (
+                                  <span key={dest} className="text-[9px] font-semibold bg-rose-50 text-rose-700 border border-rose-200 px-1 py-0.2 rounded truncate max-w-[110px]" title={dest}>
+                                    → {dest}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                          </div>
                         </Td>
                         <Td className="text-right bg-purple-50/30 dark:bg-purple-950/10">
                           <div className="flex flex-col items-end">
@@ -625,11 +900,34 @@ export function ProjectReportsPage() {
                             </span>
                             <span
                               className="text-[10px] text-slate-400 font-mono mt-0.5 whitespace-nowrap"
-                              title="Formula: Opening + Stock In − Stock Out = Remaining"
+                              title="Formula: Opening + Stock In − Own Out − Other Out = Remaining"
                             >
-                              {item.opening_stock ?? 0} + {item.stock_in_qty ?? 0} − {item.stock_out_qty ?? 0}
+                              {item.opening_stock ?? 0} + {item.stock_in_qty ?? 0} − {item.own_out_qty ?? 0} − {item.other_out_qty ?? 0}
                             </span>
                           </div>
+                        </Td>
+                        <Td>
+                          {(() => {
+                            const rPool = (item.opening_stock ?? 0) + (item.stock_in_qty ?? 0);
+                            const rDenom = rPool > 0 ? rPool : 1;
+                            const rOwn = Math.min(100, Math.round(((item.own_out_qty ?? 0) / rDenom) * 100));
+                            const rOther = Math.min(100 - rOwn, Math.round(((item.other_out_qty ?? 0) / rDenom) * 100));
+                            const rRem = Math.max(0, 100 - rOwn - rOther);
+                            return (
+                              <div className="w-full min-w-[110px]">
+                                <div className="w-full h-2 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden flex">
+                                  {rOwn > 0 && <div className="bg-blue-600 h-full" style={{ width: `${rOwn}%` }} title={`Own Out: ${item.own_out_qty ?? 0}`} />}
+                                  {rOther > 0 && <div className="bg-rose-500 h-full" style={{ width: `${rOther}%` }} title={`Other Out: ${item.other_out_qty ?? 0}`} />}
+                                  {rRem > 0 && <div className="bg-purple-500 h-full" style={{ width: `${rRem}%` }} title={`Remaining: ${item.remaining_stock ?? 0}`} />}
+                                </div>
+                                <div className="flex justify-between text-[9px] text-slate-400 font-mono mt-0.5">
+                                  <span>Own {rOwn}%</span>
+                                  {(item.other_out_qty ?? 0) > 0 && <span className="text-rose-600 font-semibold">Oth {rOther}%</span>}
+                                  <span>Rem {rRem}%</span>
+                                </div>
+                              </div>
+                            );
+                          })()}
                         </Td>
                         <Td className="text-right">
                           <button
